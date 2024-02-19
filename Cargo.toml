@@ -3,8 +3,21 @@ name = "zero2prod"
 version = "0.1.0"
 edition = "2021"
 
+# for putting logic in lib crate - binary will just be entry point with small 'main' fn
+[lib]
+path = "src/lib.rs"
+
+# can only have one lib in a proj, but multiple binaries - need to use workspace for multiple libs
+[[bin]]
+path = "src/main.rs"
+name = "zero2prod"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 actix-web = "4"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+
+[dev-dependencies]
+reqwest = "0.11"

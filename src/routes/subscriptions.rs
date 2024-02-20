@@ -16,6 +16,7 @@ pub async fn subscribe(
     // retrieving connection from app state
     db_pool: web::Data<PgPool>,
 ) -> HttpResponse {
+    log::info!("Saving new subscriber details in the database");
     // sqlx may fail in querying so returns `Result` - match statement for err handling variant
     match sqlx::query!(
         r#"
@@ -31,9 +32,12 @@ pub async fn subscribe(
     // `get_ref` for immut ref to PgPool wrapped by web::Data
     .await
     {
-        Ok(_) => HttpResponse::Ok().finish(),
+        Ok(_) => {
+            log::info!("New subscriber details saved");
+            HttpResponse::Ok().finish()
+        }
         Err(e) => {
-            println!("Failed to execute query: {}", e);
+            log::error!("Failed to execute query: {:?}", e);
             HttpResponse::InternalServerError().finish()
         }
     }

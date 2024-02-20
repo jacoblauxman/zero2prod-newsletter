@@ -16,7 +16,18 @@ pub async fn subscribe(
     // retrieving connection from app state
     db_pool: web::Data<PgPool>,
 ) -> HttpResponse {
-    log::info!("Saving new subscriber details in the database");
+    // for logging + correlation of info create unique id per request
+    let req_id = Uuid::new_v4();
+    log::info!(
+        "req_id {} - Adding `{}` `{}` as a new subscriber",
+        req_id,
+        form.email,
+        form.name
+    );
+    log::info!(
+        "req_id {} - Saving new subscriber details in the database",
+        req_id
+    );
     // sqlx may fail in querying so returns `Result` - match statement for err handling variant
     match sqlx::query!(
         r#"
@@ -33,11 +44,11 @@ pub async fn subscribe(
     .await
     {
         Ok(_) => {
-            log::info!("New subscriber details saved");
+            log::info!("req_id {} - New subscriber details saved", req_id);
             HttpResponse::Ok().finish()
         }
         Err(e) => {
-            log::error!("Failed to execute query: {:?}", e);
+            log::error!("req_id {} - Failed to execute query: {:?}", req_id, e);
             HttpResponse::InternalServerError().finish()
         }
     }

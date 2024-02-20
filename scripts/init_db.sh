@@ -1,7 +1,6 @@
-#!/usr/bin/env bash
-
 # NOTE: to make this file executable run
 # chmod +x scripts/init_db.sh
+# chmod - used to change perms of files/dirs -- +x - `add perm` 'execute'
 # then -> ./scripts/init_db.sh
 # --> can skip docker postgres setup (if already initialized) via flag SKIP_DOCKER=true
 

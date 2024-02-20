@@ -25,7 +25,7 @@ fn spawn_app() -> String {
     // at OS level - trying to bind port 0 will have OS scan for available port to then bind our app instance!
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind to random port");
     let port = listener.local_addr().unwrap().port();
-    let server = zero2prod::run(listener).expect("Failed to bind address");
+    let server = zero2prod::startup::run(listener).expect("Failed to bind address");
     let _ = tokio::spawn(server);
 
     format!("http://127.0.0.1:{}", port)
@@ -65,6 +65,7 @@ async fn subscribe_returns_400_when_form_data_missing() {
     ];
 
     for (inv_body, err_msg) in test_cases {
+
         // Act
         let res = client
             .post(&format!("{}/subscriptions", &app_addr))
@@ -73,7 +74,7 @@ async fn subscribe_returns_400_when_form_data_missing() {
             .send()
             .await
             .expect("Failed to execute POST request");
-
+            
         // Assert
         assert_eq!(
             400,

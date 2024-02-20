@@ -1,24 +1,7 @@
 use std::net::TcpListener;
+use sqlx::{PgConnection, Connection};
+use zero2prod::configuration::get_configuration;
 
-// HEALTH CHECK testing
-
-#[tokio::test]
-async fn health_check_works() {
-    // Arrange
-    let addr = spawn_app();
-    let client = reqwest::Client::new();
-
-    // Act
-    let res = client
-        .get(&format!("{}/health_check", &addr))
-        .send()
-        .await
-        .expect("Failed to execute request");
-
-    // Assert
-    assert!(res.status().is_success());
-    assert_eq!(Some(0), res.content_length());
-}
 
 // this helper creates app process and additionally returns our needed port-bound app address
 fn spawn_app() -> String {
@@ -37,10 +20,17 @@ fn spawn_app() -> String {
 async fn subscribe_returns_200_for_valid_form_data() {
     // Arrange
     let app_addr = spawn_app();
+
+    let config = get_configuration().expect("Failed to read configuration file");
+    let conn_string = config.database.connection_string();
+    let mut conn = PgConnection::connect(&conn_string)
+    .await
+    .expect("Failed to connect to Postgres Database");
+
     let client = reqwest::Client::new();
 
     // Act
-    let body = "name=mj%20hohams&email=mjhohams%40gmail.com";
+    let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
     let res = client
         .post(&format!("{}/subscriptions", &app_addr))
         .header("Content-Type", "application/x-www-form-urlencoded")
@@ -51,6 +41,11 @@ async fn subscribe_returns_200_for_valid_form_data() {
 
     // Assert
     assert_eq!(200, res.status().as_u16());
+
+    let saved = sqlx::query!("SELECT email, name FROM subscriptions",).fetch_one(&mut conn).await.expect("Failed to fetch saved subscription during testing");
+
+    assert_eq!(saved.email, "mj_hohams@gmail.com");
+    assert_eq!(saved.name, "mj hohams")
 }
 
 #[tokio::test]
@@ -74,7 +69,7 @@ async fn subscribe_returns_400_when_form_data_missing() {
             .send()
             .await
             .expect("Failed to execute POST request");
-            
+
         // Assert
         assert_eq!(
             400,
@@ -84,4 +79,28 @@ async fn subscribe_returns_400_when_form_data_missing() {
             err_msg
         );
     }
+}
+
+//
+
+//
+
+// HEALTH CHECK testing
+
+#[tokio::test]
+async fn health_check_works() {
+    // Arrange
+    let addr = spawn_app();
+    let client = reqwest::Client::new();
+
+    // Act
+    let res = client
+        .get(&format!("{}/health_check", &addr))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    // Assert
+    assert!(res.status().is_success());
+    assert_eq!(Some(0), res.content_length());
 }

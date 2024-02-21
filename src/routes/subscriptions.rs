@@ -17,7 +17,7 @@ pub struct FormData {
     // tracing by default captures all args to fn, skip used to omit info in log
     skip(form, db_pool),
     fields(
-        req_id = %Uuid::new_v4(),
+        // req_id = %Uuid::new_v4(),
         subscriber_email = %form.email,
         subscriber_name = %form.name
     )
@@ -39,7 +39,6 @@ pub async fn subscribe(
         }
     }
 }
-
 
 // inserting subscriber to database
 #[tracing::instrument(

@@ -1,6 +1,7 @@
 use actix_web::{web, HttpResponse};
 use chrono::Utc;
 use sqlx::PgPool;
+use tracing::Instrument;
 use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
@@ -18,16 +19,23 @@ pub async fn subscribe(
 ) -> HttpResponse {
     // for logging + correlation of info create unique id per request
     let req_id = Uuid::new_v4();
-    log::info!(
-        "req_id {} - Adding `{}` `{}` as a new subscriber",
-        req_id,
-        form.email,
-        form.name
+    // Spans (sim. to logs) have associated level ie `info_span` is set at info-level
+    let req_span = tracing::info_span!(
+        "req_id {} - Adding a new subscriber",
+        %req_id,
+        subscriber_email = %form.email,
+        subscriber_name = %form.name
+        // `%` tells tracing to use `Display` implementations for logging, we can also alias structured info as k/v pairs
     );
-    log::info!(
-        "req_id {} - Saving new subscriber details in the database",
-        req_id
-    );
+
+    // you have to explicitly step into span via `enter` to activate it
+    let _req_span_guard = req_span.enter();
+    // returns `Entered` ie a `guard` -- as long as not dropped all downstream spans / log events will be children of the (entered) span
+
+    // Resource Acquisition Is Initialization (RAII)
+
+    // no `enter` for query_span - `instrument` handles it at right moments in query future lifetime
+    let query_span = tracing::info_span!("Saving new subscriber details in the database");
     // sqlx may fail in querying so returns `Result` - match statement for err handling variant
     match sqlx::query!(
         r#"
@@ -39,16 +47,17 @@ pub async fn subscribe(
         form.name,
         Utc::now()
     )
-    .execute(db_pool.get_ref())
-    // `get_ref` for immut ref to PgPool wrapped by web::Data
+    .execute(db_pool.get_ref()) // `get_ref` for immut ref to PgPool wrapped by web::Data
+    // attach the span `instrumentation` via tracing's Instrument, then await -- future entered every time polled by executor - exited every time parked (on success, give success message)
+    .instrument(query_span)
     .await
     {
         Ok(_) => {
-            log::info!("req_id {} - New subscriber details saved", req_id);
+            tracing::info!("req_id {} - New subscriber details saved", req_id);
             HttpResponse::Ok().finish()
         }
         Err(e) => {
-            log::error!("req_id {} - Failed to execute query: {:?}", req_id, e);
+            tracing::error!("req_id {} - Failed to execute query: {:?}", req_id, e);
             HttpResponse::InternalServerError().finish()
         }
     }

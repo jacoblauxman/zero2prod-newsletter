@@ -1,16 +1,36 @@
+use once_cell::sync::Lazy;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::net::TcpListener;
 use uuid::Uuid;
 use zero2prod::configuration::{get_configuration, DatabaseSettings};
 use zero2prod::startup::run;
+use zero2prod::telemetry::{get_subscriber, init_subscriber};
 
 pub struct TestApp {
     pub address: String,
     pub db_pool: PgPool,
 }
 
+// logging initialization - once_cell ensures this static value init's only once in testing, but can still have access to TRACING post-init
+static TRACING: Lazy<()> = Lazy::new(|| {
+    let default_level = "info".into();
+    let subscriber_name = "test".into();
+
+    // TEST_LOG flag check
+    if std::env::var("TEST_LOG").is_ok() {
+        let subscriber = get_subscriber(subscriber_name, default_level, std::io::stdout);
+        init_subscriber(subscriber);
+    } else {
+        let subscriber = get_subscriber(subscriber_name, default_level, std::io::sink);
+        init_subscriber(subscriber);
+    }
+});
+
 // this helper creates an app process and additionally returns our needed port-bound app address and db pool's connection
 async fn spawn_app() -> TestApp {
+    // setup tracing: first time `init` invoked `TRACING` is executed - all others will skip
+    Lazy::force(&TRACING);
+
     // at OS level - trying to bind port 0 will have OS scan for available port to then bind our app instance!
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind to random port");
     let port = listener.local_addr().unwrap().port();

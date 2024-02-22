@@ -5,7 +5,7 @@ use uuid::Uuid;
 use zero2prod::configuration::{get_configuration, DatabaseSettings};
 use zero2prod::startup::run;
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
-use secrecy::ExposeSecret;
+// use secrecy::ExposeSecret;
 
 pub struct TestApp {
     pub address: String,
@@ -52,7 +52,7 @@ async fn spawn_app() -> TestApp {
 // this helper creates a `for testing` database to use with our PgPool connection
 pub async fn configure_database(configuration: &DatabaseSettings) -> PgPool {
     // create db instance
-    let mut conn = PgConnection::connect(&configuration.connection_string_without_db().expose_secret())
+    let mut conn = PgConnection::connect_with(&configuration.without_db())
         .await
         .expect("Failed to connect to Postgres during db creation");
     conn.execute(format!(r#"CREATE DATABASE "{}""#, configuration.database_name).as_str())
@@ -60,7 +60,7 @@ pub async fn configure_database(configuration: &DatabaseSettings) -> PgPool {
         .expect("Failed to create test database");
 
     // migrate db using migrations dir
-    let conn_pool = PgPool::connect(&configuration.connection_string().expose_secret())
+    let conn_pool = PgPool::connect_with(configuration.with_db())
         .await
         .expect("Failed to connect to Postgres during db migration");
     sqlx::migrate!("./migrations")

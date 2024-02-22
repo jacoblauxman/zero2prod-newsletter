@@ -1,5 +1,6 @@
-use secrecy::ExposeSecret;
-use secrecy::Secret;
+use secrecy::{ExposeSecret, Secret};
+use serde_aux::field_attributes::deserialize_number_from_string;
+use sqlx::postgres::{PgConnectOptions, PgSslMode};
 
 #[derive(serde::Deserialize)]
 pub struct Settings {
@@ -15,33 +16,37 @@ pub struct Settings {
 pub struct DatabaseSettings {
     pub username: String,
     pub password: Secret<String>,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
     pub database_name: String,
+    pub require_ssl: bool,
 }
 
 impl DatabaseSettings {
-    // helper for formatted Postgres connection string
-    pub fn connection_string(&self) -> Secret<String> {
-        Secret::new(format!(
-            "postgres://{}:{}@{}:{}/{}",
-            self.username,
-            self.password.expose_secret(),
-            self.host,
-            self.port,
-            self.database_name
-        ))
+    pub fn without_db(&self) -> PgConnectOptions {
+        let ssl_mode = if self.require_ssl {
+            PgSslMode::Require
+        } else {
+            // tries encrypted conn, fallback to unencrypted if failure
+            PgSslMode::Prefer
+        };
+        PgConnectOptions::new()
+            .host(&self.host)
+            .username(&self.username)
+            .password(&self.password.expose_secret())
+            .port(self.port)
+            .ssl_mode(ssl_mode)
     }
 
-    // helper for formatted Postgres connection string - NO NAME (for randomization / testing)
-    pub fn connection_string_without_db(&self) -> Secret<String> {
-        Secret::new(format!(
-            "postgres://{}:{}@{}:{}",
-            self.username,
-            self.password.expose_secret(),
-            self.host,
-            self.port
-        ))
+    pub fn with_db(&self) -> PgConnectOptions {
+
+        // doesn't work?:
+        // let mut options = self.without_db().database(&self.database_name);
+        // options.log_statements(tracing_log::log::LevelFilter::Trace);
+        // options
+
+        self.without_db().database(&self.database_name)
     }
 }
 
@@ -59,26 +64,21 @@ pub fn get_configuration() -> Result<Settings, config::ConfigError> {
     let settings = config::Config::builder()
         .add_source(config::File::from(config_dir.join("base.yaml")))
         .add_source(config::File::from(config_dir.join(env_filename)))
+        // allows adding settings from env vars (prefix of APP and __ for separator) -- enables override of any value in our Settings
+        .add_source(
+            config::Environment::with_prefix("APP")
+                .prefix_separator("_")
+                .separator("__"),
+                // `APP_APPLICATION__PORT=5001 would set `Settings.application.port`
+        )
         .build()?;
 
     settings.try_deserialize::<Settings>()
 }
 
-// pub fn get_configuration() -> Result<Settings, config::ConfigError> {
-//     // init config reader
-//     let settings = config::Config::builder()
-//         // add config values from our configuration yaml file
-//         .add_source(config::File::new(
-//             "configuration.yaml",
-//             config::FileFormat::Yaml,
-//         ))
-//         .build()?;
-//     // try to deserialize into our `Settings` type
-//     settings.try_deserialize::<Settings>()
-// }
-
 #[derive(serde::Deserialize)]
 pub struct ApplicationSettings {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
 }

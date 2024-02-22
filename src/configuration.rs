@@ -40,7 +40,6 @@ impl DatabaseSettings {
     }
 
     pub fn with_db(&self) -> PgConnectOptions {
-
         // doesn't work?:
         // let mut options = self.without_db().database(&self.database_name);
         // options.log_statements(tracing_log::log::LevelFilter::Trace);
@@ -69,7 +68,7 @@ pub fn get_configuration() -> Result<Settings, config::ConfigError> {
             config::Environment::with_prefix("APP")
                 .prefix_separator("_")
                 .separator("__"),
-                // `APP_APPLICATION__PORT=5001 would set `Settings.application.port`
+            // `APP_APPLICATION__PORT=5001 would set `Settings.application.port`
         )
         .build()?;
 

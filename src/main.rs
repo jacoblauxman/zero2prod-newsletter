@@ -12,9 +12,7 @@ async fn main() -> Result<(), std::io::Error> {
     init_subscriber(subscriber);
 
     let configuration = get_configuration().expect("Failed to read configuration file");
-    let conn_pool = PgPoolOptions::new()
-        .connect_lazy_with(configuration.database.with_db());
-
+    let conn_pool = PgPoolOptions::new().connect_lazy_with(configuration.database.with_db());
 
     // let address = format!("127.0.0.1:{}", configuration.application_port);
     let address = format!(

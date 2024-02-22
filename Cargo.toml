@@ -34,9 +34,11 @@ tracing-subscriber = { version = "0.3", features = ["registry", "env-filter"] }
 # Registry impl's `Subscriber` trait - does not actually record, but collects and stores span data exposed to any layer wrapping it
 tracing-bunyan-formatter = "0.3"
 tracing-log = "0.1"
-tracing-actix-web = "0.7" # 'drop-in' replacement of actix-web's Logger - just based on `tracing` instead of `log`
+tracing-actix-web = "0.7"        # 'drop-in' replacement of actix-web's Logger - just based on `tracing` instead of `log`
 
-secrecy = { version = "0.8", features = ["serde"] } # wrapper for explicitly marking which fields to NOT log
+secrecy = { version = "0.8", features = [
+  "serde",
+] } # wrapper for explicitly marking which fields to NOT log
 
 # toml syntax for avoiding super long line:
 [dependencies.sqlx]

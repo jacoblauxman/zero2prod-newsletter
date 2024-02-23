@@ -40,6 +40,8 @@ secrecy = { version = "0.8", features = [
   "serde",
 ] } # wrapper for explicitly marking which fields to NOT log
 
+unicode-segmentation = "1"
+
 # toml syntax for avoiding super long line:
 [dependencies.sqlx]
 version = "0.7"

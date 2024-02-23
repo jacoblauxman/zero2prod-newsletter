@@ -157,3 +157,33 @@ async fn health_check_works() {
     assert!(res.status().is_success());
     assert_eq!(Some(0), res.content_length());
 }
+
+#[tokio::test]
+async fn subscribe_returns_400_when_fields_are_present_but_empty() {
+    // Arrange
+    let app = spawn_app().await;
+    let client = reqwest::Client::new();
+    let test_cases = vec![
+        ("name=&email=mj%5Fhohams@gmail.com", "empty name"),
+        ("name=hohams&email=", "empty email"),
+        ("name=hohams&email=notavalidemailaddress", "invalid email"),
+    ];
+    for (body, descr) in test_cases {
+        // Act
+        let res = client
+            .post(&format!("{}/subscriptions", &app.address))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(body)
+            .send()
+            .await
+            .expect("Failed to execute POST request");
+
+        // Assert
+        assert_eq!(
+            400,
+            res.status().as_u16(),
+            "The API did not return a 400 Bad Request when payload given was: {}",
+            descr
+        );
+    }
+}

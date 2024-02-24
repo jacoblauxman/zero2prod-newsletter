@@ -187,3 +187,11 @@ async fn subscribe_returns_400_when_fields_are_present_but_empty() {
         );
     }
 }
+
+
+// #[test]
+
+// fn dummy_fail() {
+//     let res: Result<&str, &str> = Err("The app crashed due to an IO error, woops");
+//     claims::assert_ok!(res);
+// }

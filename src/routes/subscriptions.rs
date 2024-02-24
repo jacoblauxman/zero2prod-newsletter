@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::domain::{NewSubscriber, SubscriberName};
+use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
@@ -30,10 +30,17 @@ pub async fn subscribe(
     // retrieving connection from app state
     db_pool: web::Data<PgPool>,
 ) -> HttpResponse {
-    let new_subscriber = NewSubscriber {
-        email: form.0.email,
-        name: SubscriberName::parse(form.0.name),
+    let name = match SubscriberName::parse(form.0.name) {
+        Ok(name) => name,
+        Err(_) => return HttpResponse::BadRequest().finish(),
     };
+
+    let email = match SubscriberEmail::parse(form.0.email) {
+        Ok(email) => email,
+        Err(_) => return HttpResponse::BadRequest().finish(),
+    };
+
+    let new_subscriber = NewSubscriber { email, name };
 
     // sqlx may fail in querying so returns `Result` - match statement for err handling variant
     match insert_subscriber(&db_pool, &new_subscriber).await {
@@ -47,21 +54,6 @@ pub async fn subscribe(
         }
     }
 }
-
-// // helper fn for bool return re: validation constraints on subscriber names
-// pub fn is_valid_name(s: &str) -> bool {
-//     let is_empty_or_whitespace = s.trim().is_empty();
-
-//     // `grapheme` is defined by Unicode standard as `user-perceived` char - `å` is a single grapheme, but is technically 2 chars (`a` and ` ̊`)
-//     // `graphemes()` returns iterator over graphemes in `s` (true specifies use extended grapheme definition set --- 'recommended' one)
-//     let is_too_long = s.graphemes(true).count() > 256;
-
-//     let forbidden_chars = ['/', '(', ')', '"', '<', '>', '\\', '{', '}'];
-//     let contains_forbidden_chars = s.chars().any(|g| forbidden_chars.contains(&g));
-
-//     // falsy return if any checks are `true`
-//     !(is_empty_or_whitespace || is_too_long || contains_forbidden_chars)
-// }
 
 // inserting subscriber to database
 #[tracing::instrument(
@@ -78,7 +70,7 @@ pub async fn insert_subscriber(
         VALUES ($1, $2, $3, $4)
         "#,
         Uuid::new_v4(),
-        new_subscriber.email,
+        new_subscriber.email.as_ref(),
         new_subscriber.name.as_ref(),
         Utc::now()
     )

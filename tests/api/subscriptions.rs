@@ -129,29 +129,13 @@ async fn subscribe_sends_confirmation_email_with_link() {
         // no expectation, test focuses on behavior elsewhere
         .mount(&app.email_server)
         .await;
+
     // Act
     app.post_subscriptions(body.into()).await;
 
     // Assert
-    // received_requests() returns intercepted requests from MockServer - get first
     let email_req = &app.email_server.received_requests().await.unwrap()[0];
-    //parse as JSON from raw bytes
-    let body: serde_json::Value = serde_json::from_slice(&email_req.body).unwrap();
-
-    // HELPER closure: use `linkify` (dev-dep) to extract link from req field
-    let get_link = |s: &str| {
-        let links: Vec<_> = linkify::LinkFinder::new()
-            .links(s)
-            .filter(|link| *link.kind() == linkify::LinkKind::Url)
-            .collect();
-        // confirm have link -- checks length of links received (to be / have one)
-        assert_eq!(links.len(), 1);
-        links[0].as_str().to_owned()
-    };
-
-    let html_link = get_link(&body["HtmlBody"].as_str().unwrap());
-    let text_link = get_link(&body["TextBody"].as_str().unwrap());
-
-    // confirm links are the same
-    assert_eq!(html_link, text_link);
+    let confirmation_links = app.get_confirmation_links(&email_req);
+    // links should be identical
+    assert_eq!(confirmation_links.html, confirmation_links.plain_text);
 }

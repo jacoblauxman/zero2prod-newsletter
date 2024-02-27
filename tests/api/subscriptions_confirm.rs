@@ -1,6 +1,6 @@
 use crate::helpers::spawn_app;
-use reqwest::Url;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::method;
+// use wiremock::matchers::path; // not in use currently
 use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
@@ -17,25 +17,10 @@ async fn link_returned_by_subscribe_returns_200_if_called() {
 
     app.post_subscriptions(body.into()).await;
     let email_req = &app.email_server.received_requests().await.unwrap()[0];
-    let body: serde_json::Value = serde_json::from_slice(&email_req.body).unwrap();
-    // extracting link from req fields
-    let get_link = |s: &str| {
-        let links: Vec<_> = linkify::LinkFinder::new()
-            .links(s)
-            .filter(|link| *link.kind() == linkify::LinkKind::Url)
-            .collect();
-        assert_eq!(links.len(), 1);
-        links[0].as_str().to_owned()
-    };
-    let raw_confirmation_link = &get_link(&body["HtmlBody"].as_str().unwrap());
-    let mut confirmation_link = Url::parse(raw_confirmation_link).unwrap();
-    // confirm host API call
-    assert_eq!(confirmation_link.host_str().unwrap(), "127.0.0.1");
-    // then rewrite url to include port
-    confirmation_link.set_port(Some(app.port)).unwrap();
+    let confirmation_links = app.get_confirmation_links(&email_req);
 
     // Act
-    let res = reqwest::get(confirmation_link).await.unwrap();
+    let res = reqwest::get(confirmation_links.html).await.unwrap();
 
     // Assert
     assert_eq!(res.status().as_u16(), 200);
@@ -53,4 +38,38 @@ async fn confirmations_without_token_are_rejected_with_400() {
 
     // Assert
     assert_eq!(res.status().as_u16(), 400);
+}
+
+#[tokio::test]
+async fn clicking_confirmation_link_confirms_subscriber() {
+    // Arrange
+    let app = spawn_app().await;
+    let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
+
+    Mock::given(method("POST"))
+        // .and(path("/transactional"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.email_server)
+        .await;
+
+    app.post_subscriptions(body.into()).await;
+    let email_req = &app.email_server.received_requests().await.unwrap()[0];
+    let confirmation_links = app.get_confirmation_links(&email_req);
+
+    // Act
+    reqwest::get(confirmation_links.html)
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // Assert
+    let saved = sqlx::query!("SELECT email, name, status FROM subscriptions",)
+        .fetch_one(&app.db_pool)
+        .await
+        .expect("Failed to fetch saved subscription during testing");
+
+    assert_eq!(saved.email, "mj_hohams@gmail.com");
+    assert_eq!(saved.name, "mj hohams");
+    assert_eq!(saved.status, "confirmed");
 }

@@ -5,16 +5,10 @@ async fn subscribe_returns_200_for_valid_form_data() {
     // Arrange
     let app = spawn_app().await;
     let client = reqwest::Client::new();
+    let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
 
     // Act
-    let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
-    let res = client
-        .post(&format!("{}/subscriptions", &app.address))
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .body(body)
-        .send()
-        .await
-        .expect("Failed to execute POST request");
+    let res = app.post_subscriptions(body.into()).await;
 
     // Assert
     assert_eq!(200, res.status().as_u16());
@@ -42,13 +36,7 @@ async fn subscribe_returns_400_when_form_data_missing() {
 
     for (inv_body, err_msg) in test_cases {
         // Act
-        let res = client
-            .post(&format!("{}/subscriptions", &app.address))
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .body(inv_body)
-            .send()
-            .await
-            .expect("Failed to execute POST request");
+        let res = app.post_subscriptions(inv_body.into()).await;
 
         // Assert
         assert_eq!(
@@ -60,7 +48,6 @@ async fn subscribe_returns_400_when_form_data_missing() {
         );
     }
 }
-
 
 #[tokio::test]
 async fn subscribe_returns_400_when_fields_are_present_but_invalid() {
@@ -74,13 +61,7 @@ async fn subscribe_returns_400_when_fields_are_present_but_invalid() {
     ];
     for (body, descr) in test_cases {
         // Act
-        let res = client
-            .post(&format!("{}/subscriptions", &app.address))
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .body(body)
-            .send()
-            .await
-            .expect("Failed to execute POST request");
+        let res = app.post_subscriptions(body.into()).await;
 
         // Assert
         assert_eq!(

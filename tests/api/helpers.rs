@@ -4,7 +4,7 @@ use std::net::TcpListener;
 use uuid::Uuid;
 use zero2prod::configuration::{get_configuration, DatabaseSettings};
 use zero2prod::email_client::EmailClient;
-use zero2prod::startup::run;
+use zero2prod::startup::{get_connection_pool, run, Application};
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
 
 // logging initialization - once_cell ensures this static value init's only once in testing, but can still have access to TRACING post-init
@@ -27,41 +27,47 @@ pub struct TestApp {
     pub db_pool: PgPool,
 }
 
+impl TestApp {
+    pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
+        reqwest::Client::new()
+            .post(&format!("{}/subscriptions", &self.address))
+            .header("Content-TYpe", "application/x-www-form-urlencoded")
+            .body(body)
+            .send()
+            .await
+            .expect("Failed to execute POST request")
+    }
+}
+
 // this helper creates an app process and additionally returns our needed port-bound app address and db pool's connection
 pub async fn spawn_app() -> TestApp {
     // setup tracing: first time `init` invoked `TRACING` is executed - all others will skip
     Lazy::force(&TRACING);
 
-    // at OS level - trying to bind port 0 will have OS scan for available port to then bind our app instance!
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind to random port");
-    let port = listener.local_addr().unwrap().port();
-    let address = format!("http://127.0.0.1:{}", port);
+    let configuration = {
+        let mut c = get_configuration().expect("Failed to read configuration file");
+        // randomize db for each test case
+        c.database.database_name = Uuid::new_v4().to_string();
+        // randomize OS port
+        c.application.port = 0;
+        c
+    };
 
-    let mut configuration = get_configuration().expect("Failed to read configuration file");
-    // - create a new logical db with unique name - run db migrations on it (randomized name via uuid)
-    configuration.database.database_name = Uuid::new_v4().to_string();
-    let db_pool = configure_database(&configuration.database).await;
-    // utilize helper logic to return our created `for testing` PgPool
+    // create + migrate db
+    configure_database(&configuration.database).await;
 
-    // build new email client
-    let sender_email = configuration
-        .email_client
-        .sender()
-        .expect("Invalid sender email address");
+    // launch application as background task
+    let application = Application::build(configuration.clone())
+        .await
+        .expect("Failed to build application for testing");
 
-    let timeout = configuration.email_client.timeout();
+    let address = format!("http://127.0.0.1:{}", application.port());
 
-    let email_client = EmailClient::new(
-        configuration.email_client.base_url,
-        sender_email,
-        configuration.email_client.authorization_token,
-        timeout,
-    );
-
-    let server = run(listener, db_pool.clone(), email_client).expect("Failed to bind address");
-    let _ = tokio::spawn(server);
-
-    TestApp { address, db_pool }
+    let _ = tokio::spawn(application.run_until_stopped());
+    TestApp {
+        address,
+        db_pool: get_connection_pool(&configuration.database),
+    }
 }
 
 // this helper creates a `for testing` database to use with our PgPool connection

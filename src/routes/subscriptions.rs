@@ -49,7 +49,7 @@ pub async fn subscribe(
     db_pool: web::Data<PgPool>,
 ) -> HttpResponse {
     // let new_subscriber = match parse_subscriber(form.0) {
-        let new_subscriber = match form.0.try_into() {
+    let new_subscriber = match form.0.try_into() {
         Ok(subscriber) => subscriber,
         Err(_) => return HttpResponse::BadRequest().finish(),
     };

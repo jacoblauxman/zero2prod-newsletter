@@ -1,10 +1,10 @@
 use actix_web::{web, HttpResponse};
 use chrono::Utc;
 use sqlx::PgPool;
-use tracing::Instrument;
+// use tracing::Instrument;
 use uuid::Uuid;
 
-use unicode_segmentation::UnicodeSegmentation;
+// use unicode_segmentation::UnicodeSegmentation;
 
 use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 
@@ -13,13 +13,6 @@ pub struct FormData {
     email: String,
     name: String,
 }
-
-// helper for helping with form data parsing -- converts from `wire format` to `domain model`
-// pub fn parse_subscriber(form: FormData) -> Result<NewSubscriber, String> {
-//     let name = SubscriberName::parse(form.name)?;
-//     let email = SubscriberEmail::parse(form.email)?;
-//     Ok(NewSubscriber { email, name })
-// }
 
 impl TryFrom<FormData> for NewSubscriber {
     type Error = String;

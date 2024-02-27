@@ -1,4 +1,7 @@
 use crate::helpers::spawn_app;
+use wiremock::matchers::method;
+// use wiremock::matchers::path; // not in use due to how Elastic Email API setup is
+use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
 async fn subscribe_returns_200_for_valid_form_data() {
@@ -6,19 +9,42 @@ async fn subscribe_returns_200_for_valid_form_data() {
     let app = spawn_app().await;
     let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
 
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.email_server)
+        .await;
+
     // Act
     let res = app.post_subscriptions(body.into()).await;
 
     // Assert
     assert_eq!(200, res.status().as_u16());
+}
 
-    let saved = sqlx::query!("SELECT email, name FROM subscriptions",)
+#[tokio::test]
+async fn subscribe_persists_new_subscriber() {
+    // Arrange
+    let app = spawn_app().await;
+    let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
+
+    Mock::given(method("POST"))
+        // .and(path("/transactional"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.email_server)
+        .await;
+
+    // Act
+    app.post_subscriptions(body.into()).await;
+
+    let saved = sqlx::query!("SELECT email, name, status FROM subscriptions",)
         .fetch_one(&app.db_pool)
         .await
         .expect("Failed to fetch saved subscription during testing");
 
+    // Assert
     assert_eq!(saved.email, "mj_hohams@gmail.com");
-    assert_eq!(saved.name, "mj hohams")
+    assert_eq!(saved.name, "mj hohams");
+    assert_eq!(saved.status, "pending_confirmation");
 }
 
 #[tokio::test]
@@ -69,4 +95,63 @@ async fn subscribe_returns_400_when_fields_are_present_but_invalid() {
             descr
         );
     }
+}
+
+#[tokio::test]
+async fn subscribe_sends_a_confirmation_email_for_valid_data() {
+    // Arrange
+    let app = spawn_app().await;
+    let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
+
+    Mock::given(method("POST"))
+        // .and(method("POST"))
+        // .and(path("/transactional")) // removed for discrepancy between Elastic Email and PostMark
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&app.email_server)
+        .await;
+
+    // Act
+    app.post_subscriptions(body.into()).await;
+
+    // Assert
+    // on `drop` expect asserted
+}
+
+#[tokio::test]
+async fn subscribe_sends_confirmation_email_with_link() {
+    // Arrange
+    let app = spawn_app().await;
+    let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
+
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        // no expectation, test focuses on behavior elsewhere
+        .mount(&app.email_server)
+        .await;
+    // Act
+    app.post_subscriptions(body.into()).await;
+
+    // Assert
+    // received_requests() returns intercepted requests from MockServer - get first
+    let email_req = &app.email_server.received_requests().await.unwrap()[0];
+    //parse as JSON from raw bytes
+    let body: serde_json::Value = serde_json::from_slice(&email_req.body).unwrap();
+
+    // HELPER closure: use `linkify` (dev-dep) to extract link from req field
+    let get_link = |s: &str| {
+        let links: Vec<_> = linkify::LinkFinder::new()
+            .links(s)
+            .filter(|link| *link.kind() == linkify::LinkKind::Url)
+            .collect();
+        // confirm have link -- checks length of links received (to be / have one)
+        assert_eq!(links.len(), 1);
+        links[0].as_str().to_owned()
+    };
+
+    let html_link = get_link(&body["HtmlBody"].as_str().unwrap());
+    let text_link = get_link(&body["TextBody"].as_str().unwrap());
+
+    // confirm links are the same
+    assert_eq!(html_link, text_link);
 }

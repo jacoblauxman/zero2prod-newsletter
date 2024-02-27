@@ -1,6 +1,7 @@
 use once_cell::sync::Lazy;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
+use wiremock::MockServer;
 use zero2prod::configuration::{get_configuration, DatabaseSettings};
 use zero2prod::startup::{get_connection_pool, Application};
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
@@ -23,13 +24,14 @@ static TRACING: Lazy<()> = Lazy::new(|| {
 pub struct TestApp {
     pub address: String,
     pub db_pool: PgPool,
+    pub email_server: MockServer,
 }
 
 impl TestApp {
     pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
         reqwest::Client::new()
             .post(&format!("{}/subscriptions", &self.address))
-            .header("Content-TYpe", "application/x-www-form-urlencoded")
+            .header("Content-Type", "application/x-www-form-urlencoded")
             .body(body)
             .send()
             .await
@@ -42,12 +44,18 @@ pub async fn spawn_app() -> TestApp {
     // setup tracing: first time `init` invoked `TRACING` is executed - all others will skip
     Lazy::force(&TRACING);
 
+    // launch mock server to stand in for Elastic Email API
+    let email_server = MockServer::start().await;
+
+    // randomize config for test isolation
     let configuration = {
         let mut c = get_configuration().expect("Failed to read configuration file");
-        // randomize db for each test case
+        // randomize db name
         c.database.database_name = Uuid::new_v4().to_string();
         // randomize OS port
         c.application.port = 0;
+        // use mock server as email API
+        c.email_client.base_url = email_server.uri();
         c
     };
 
@@ -65,6 +73,7 @@ pub async fn spawn_app() -> TestApp {
     TestApp {
         address,
         db_pool: get_connection_pool(&configuration.database),
+        email_server,
     }
 }
 

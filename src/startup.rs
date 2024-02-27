@@ -1,6 +1,6 @@
 use crate::configuration::{DatabaseSettings, Settings};
 use crate::email_client::EmailClient;
-use crate::routes::{health_check, subscribe};
+use crate::routes::{confirm, health_check, subscribe};
 
 use actix_web::dev::Server;
 use actix_web::{web, App, HttpServer};
@@ -39,7 +39,12 @@ impl Application {
         );
         let listener = TcpListener::bind(address)?;
         let port = listener.local_addr().unwrap().port();
-        let server = run(listener, conn_pool, email_client)?;
+        let server = run(
+            listener,
+            conn_pool,
+            email_client,
+            configuration.application.base_url,
+        )?;
         // allows saving of bound port to Application
         Ok(Self { port, server })
     }
@@ -55,11 +60,18 @@ impl Application {
     }
 }
 
+// wrapper type defined to retrieve URL in `subscribe` handler
+// - note: retrieval from context in actix-web is type-based: using raw `String` would expose conflicts
+pub struct ApplicationBaseUrl(pub String);
 pub fn run(
     listener: TcpListener,
     conn: PgPool,
     email_client: EmailClient,
+    base_url: String,
 ) -> Result<Server, std::io::Error> {
+    // context for base url - dependent on env
+    let base_url = web::Data::new(ApplicationBaseUrl(base_url));
+    // context for email client's API
     let email_client = web::Data::new(email_client);
     // wrap db connection (non-cloneable TCP connection with Postgres) in smart pointer (ARC) -- pointer to PgConnection
     let db_pool = web::Data::new(conn);
@@ -70,10 +82,12 @@ pub fn run(
             .wrap(TracingLogger::default())
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe))
+            .route("/subscriptions/confirm", web::get().to(confirm))
             // register db conn as part of app state
             .app_data(db_pool.clone())
             // since EC has two data fields (base_url and sender) along with Client, share (wrapped via Ac) amongst all App instances (one per thread)
             .app_data(email_client.clone())
+            .app_data(base_url.clone())
     })
     .listen(listener)?
     .run();

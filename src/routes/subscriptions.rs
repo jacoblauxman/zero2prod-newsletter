@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::{
     domain::{NewSubscriber, SubscriberEmail, SubscriberName},
     email_client::EmailClient,
+    startup::ApplicationBaseUrl,
 };
 
 #[derive(serde::Deserialize)]
@@ -29,7 +30,7 @@ impl TryFrom<FormData> for NewSubscriber {
 #[tracing::instrument(
     name = "Adding a new subscriber",
     // tracing by default captures all args to fn, skip used to omit info in log
-    skip(form, db_pool, email_client),
+    skip(form, db_pool, email_client, base_url),
     fields(
         // req_id = %Uuid::new_v4(),
         subscriber_email = %form.email,
@@ -42,6 +43,7 @@ pub async fn subscribe(
     db_pool: web::Data<PgPool>,
     // retrieve email client from app state
     email_client: web::Data<EmailClient>,
+    base_url: web::Data<ApplicationBaseUrl>,
 ) -> HttpResponse {
     // let new_subscriber = match parse_subscriber(form.0) {
     let new_subscriber = match form.0.try_into() {
@@ -55,7 +57,7 @@ pub async fn subscribe(
     }
 
     // return `500` if send via confirmation email API fails
-    if send_confirmation_email(&email_client, new_subscriber)
+    if send_confirmation_email(&email_client, new_subscriber, &base_url.0)
         .await
         .is_err()
     {
@@ -67,13 +69,15 @@ pub async fn subscribe(
 // send confirmation email to new subscriber
 #[tracing::instrument(
     name = "Send a confirmation email to a new subscriber",
-    skip(email_client, new_subscriber)
+    skip(email_client, new_subscriber, base_url)
 )]
 pub async fn send_confirmation_email(
     email_client: &EmailClient,
     new_subscriber: NewSubscriber,
+    base_url: &str,
 ) -> Result<(), reqwest::Error> {
-    let confirmation_link = "https://no-such-place.com/subscriptions/confirm";
+    // let confirmation_link = "https://no-such-place.com/subscriptions/confirm";
+    let confirmation_link = format!("{}/subscriptions/confirm?subscription_token=mytoken", base_url);
     let text_content = format!(
         "Welcome to our newsletter!\nVisit {} to confirm your subscription.",
         confirmation_link

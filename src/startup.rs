@@ -9,6 +9,7 @@ use sqlx::PgPool;
 use std::net::TcpListener;
 use tracing_actix_web::TracingLogger;
 
+// holds server as well as app port
 pub struct Application {
     port: u16,
     server: Server,
@@ -80,6 +81,7 @@ pub fn run(
     Ok(server)
 }
 
+// helper - builds connection to pg pool
 pub fn get_connection_pool(configuration: &DatabaseSettings) -> PgPool {
     PgPoolOptions::new().connect_lazy_with(configuration.with_db())
 }

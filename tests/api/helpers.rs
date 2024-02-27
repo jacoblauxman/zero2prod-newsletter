@@ -82,6 +82,7 @@ async fn configure_database(configuration: &DatabaseSettings) -> PgPool {
     let conn_pool = PgPool::connect_with(configuration.with_db())
         .await
         .expect("Failed to connect to Postgres during db migration");
+
     sqlx::migrate!("./migrations")
         .run(&conn_pool)
         .await

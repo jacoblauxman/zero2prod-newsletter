@@ -59,8 +59,10 @@ impl EmailClient {
 }
 
 #[derive(serde::Serialize)]
+// used due to field names requirement (ie `LikeThis`)
 #[serde(rename_all = "PascalCase")]
 struct SendEmailRequest<'a> {
+    // to store ref's (of str slices) we add lifetime param 'a
     from: &'a str,
     to: &'a str,
     subject: &'a str,
@@ -86,14 +88,17 @@ mod tests {
 
     use claims::{assert_err, assert_ok};
 
+    // custom matcher for confirming request body's data shape / fields correct
     struct SendEmailBodyMatcher;
 
     impl wiremock::Match for SendEmailBodyMatcher {
         fn matches(&self, req: &Request) -> bool {
+            // parse body as json value
             let res: Result<serde_json::Value, _> = serde_json::from_slice(&req.body);
 
             if let Ok(body) = res {
-                dbg!(&body);
+                // dbg!(&body);
+                // check all mandatory fields populated
                 body.get("From").is_some()
                     && body.get("To").is_some()
                     && body.get("Subject").is_some()
@@ -106,7 +111,7 @@ mod tests {
         }
     }
 
-    // helpers
+    // helpers for gen'ing mock request data
 
     fn subject() -> String {
         Sentence(1..2).fake()

@@ -16,6 +16,7 @@ async fn main() -> Result<(), std::io::Error> {
     let conn_pool = PgPoolOptions::new().connect_lazy_with(configuration.database.with_db());
 
     // build `EmailClient` from `configuration`
+    let timeout = configuration.email_client.timeout();
     let sender_email = configuration
         .email_client
         .sender()
@@ -24,6 +25,7 @@ async fn main() -> Result<(), std::io::Error> {
         configuration.email_client.base_url,
         sender_email,
         configuration.email_client.authorization_token,
+        timeout,
     );
 
     // let address = format!("127.0.0.1:{}", configuration.application_port);

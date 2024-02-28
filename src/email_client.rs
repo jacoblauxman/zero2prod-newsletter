@@ -18,7 +18,6 @@ impl EmailClient {
     ) -> Self {
         let http_client = Client::builder().timeout(timeout).build().unwrap();
         Self {
-            // http_client: Client::new(),
             http_client,
             base_url,
             sender,
@@ -79,7 +78,6 @@ mod tests {
     use fake::faker::lorem::en::{Paragraph, Sentence};
     use fake::{Fake, Faker};
     use secrecy::Secret;
-    // use tracing_subscriber::FmtSubscriber;
     use wiremock::matchers::any;
     #[allow(unused_imports)] // since not using 'path' explicitly right now
     use wiremock::matchers::{header, header_exists, method, path};

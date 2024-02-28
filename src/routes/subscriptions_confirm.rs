@@ -1,12 +1,15 @@
 use actix_web::{web, HttpResponse};
 use sqlx::PgPool;
 use uuid::Uuid;
+
 // for ensuring `subscription_token` query param via `Query`
 #[derive(serde::Deserialize)]
 pub struct Paramaters {
     subscription_token: String,
 }
 
+// -- -- SUBSCRIPTION CONFIRMATION -- -- //
+// submission response handling / orchestration
 #[tracing::instrument(name = "Confirm a pending subscriber", skip(parameters, db_pool))]
 pub async fn confirm(
     parameters: web::Query<Paramaters>,

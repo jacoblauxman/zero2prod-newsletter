@@ -4,6 +4,7 @@ use crate::{
     startup::ApplicationBaseUrl,
 };
 use actix_web::{http::StatusCode, web, HttpResponse, ResponseError};
+use anyhow::Context;
 use chrono::Utc;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
@@ -28,9 +29,9 @@ impl TryFrom<FormData> for NewSubscriber {
     }
 }
 
-// -- SUBSCRIBE -- //
+// -- -- SUBSCRIBE -- -- //
 
-// form submission handling / orchestration
+// submission handling / orchestration
 #[tracing::instrument(
     name = "Adding a new subscriber",
     // tracing by default captures all args to fn, skip used to omit info in log
@@ -50,24 +51,28 @@ pub async fn subscribe(
     base_url: web::Data<ApplicationBaseUrl>,
 ) -> Result<HttpResponse, SubscribeError> {
     // get subscriber data from form input
-    // no longer have #[from] for `ValidationError` - have to map explicitly because `String` doesn't impl Error trait and can't be returned in Error::source (used `None` for error case handling prior)
     let new_subscriber = form.0.try_into().map_err(SubscribeError::ValidationError)?;
+    // note: no longer have #[from] for `SubscribeError::ValidationError` - have to map explicitly because `String` doesn't impl Error trait and can't be returned in Error::source (used `None` for error case handling prior)
     // `begin` acquires connection from the db's pool to kick off transaction -- provides way to convert multi-steps of db interaction into 'all-or-nothing'
-    let mut transaction = db_pool.begin().await.map_err(SubscribeError::PoolError)?;
+    let mut transaction = db_pool
+        .begin()
+        .await
+        .context("Failed to acquire Postgres connection from the db pool")?;
     // get subscriber's id from inserting into db, return `500` if fails
     let subscriber_id = insert_subscriber(&mut transaction, &new_subscriber)
         .await
-        .map_err(SubscribeError::InsertSubscriberError)?;
+        .context("Failed to insert new subscriber into the database")?;
     // rand gen'd confirmation token
     let subscription_token = generate_subscription_token();
     // store subscriber's token in db associated to sub's id, `500` if fails
-    store_token(&mut transaction, subscriber_id, &subscription_token).await?;
+    store_token(&mut transaction, subscriber_id, &subscription_token)
+        .await
+        .context("Failed to store confirmation token for new subscriber in db")?;
     // finalize db transaction/commit and return conn to db pool, `500` if fails
-    // transaction.commit().await?;
     transaction
         .commit()
         .await
-        .map_err(SubscribeError::TransactionCommitError)?;
+        .context("Failed to commit SQL transaction to store new subscriber into db")?;
     // send email via external API service, `500` if fails
     send_confirmation_email(
         &email_client,
@@ -75,27 +80,26 @@ pub async fn subscribe(
         &base_url.0,
         &subscription_token,
     )
-    .await?;
+    .await
+    .context("Failed to send a confirmation email to new subscriber")?;
 
     Ok(HttpResponse::Ok().finish())
 }
 
+// -- ERRORS for SUBSCRIBE -- //
+
 #[derive(thiserror::Error)]
-// note: `error()` procedural macro defines `Display` representation of enum variant applied to
 pub enum SubscribeError {
+    // destructuring of fields (0th) within given Error tuple variant
     #[error("{0}")]
-    // this syntax specifically interpolates value from tuple Struct (ie accesses 0th field)
     ValidationError(String),
-    #[error("Failed to store confirmation token for new subscriber")]
-    StoreTokenError(#[from] StoreTokenError), //`from` automatically derives impl of From for type applied - used as error source as well (no need for both `from` and `source`)
-    #[error("Failed to send confirmation email to new subscriber")]
-    SendEmailError(#[from] reqwest::Error),
-    #[error("Failed to acquire a Postgres connection from the db pool")]
-    PoolError(#[source] sqlx::Error), // `source` denotes what should be returned as root case in Error::source (our `source()` method fn)
-    #[error("Failed to insert new subscriber in the database")]
-    InsertSubscriberError(#[source] sqlx::Error),
-    #[error("Failed to commit SQL transaction to store new subscriber in db")]
-    TransactionCommitError(#[source] sqlx::Error),
+    // `transparent` delegates both `Display` + `source` impl's to type within `UnexpectedError`
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+    // we utilize `context` method from `anyhow` to:
+    // 1) convert err returned by methods into anyhow::Error
+    // 2) enrich with additional context around intention (ie our message)
+    // `context` provided via `Context` trait - `anyhow` implements for `Result` (ie an EXTENSION TRAIT)
 }
 
 impl std::fmt::Debug for SubscribeError {
@@ -104,90 +108,18 @@ impl std::fmt::Debug for SubscribeError {
     }
 }
 
-// impl std::fmt::Display for SubscribeError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         // write!(f, "Failed to create a new subscriber")
-//         match self {
-//             SubscribeError::ValidationError(err) => write!(f, "{err}"),
-//             // SubscribeError::DatabaseError(_) => write!(f, "???"),
-//             SubscribeError::PoolError(_) => {
-//                 write!(
-//                     f,
-//                     "Failed to acquire a Postgres connection from the db pool"
-//                 )
-//             }
-//             SubscribeError::InsertSubscriberError(_) => {
-//                 write!(f, "Failed to insert a new subscriber in the database")
-//             }
-//             SubscribeError::TransactionCommitError(_) => {
-//                 write!(
-//                     f,
-//                     "Failed to commit SQL transaction to store new subscriber"
-//                 )
-//             }
-//             SubscribeError::StoreTokenError(_) => write!(
-//                 f,
-//                 "Failed to store the confirmation token for a new subscriber"
-//             ),
-//             SubscribeError::SendEmailError(_) => write!(f, "Failed to send confirmation email"),
-//         }
-//     }
-// }
-
-// impl std::error::Error for SubscribeError {
-//     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-//         match self {
-//             // &str / String does not implement `Error` - make 'root cause'
-//             SubscribeError::ValidationError(_) => None,
-//             // SubscribeError::DatabaseError(err) => Some(err),
-//             SubscribeError::StoreTokenError(err) => Some(err),
-//             SubscribeError::SendEmailError(err) => Some(err),
-//             SubscribeError::PoolError(err) => Some(err),
-//             SubscribeError::InsertSubscriberError(err) => Some(err),
-//             SubscribeError::TransactionCommitError(err) => Some(err),
-//         }
-//     }
-// }
-
-// default implementation returns `500` - control flow provided for `SubscribeError` variations
 impl ResponseError for SubscribeError {
     fn status_code(&self) -> StatusCode {
         match self {
             SubscribeError::ValidationError(_) => StatusCode::BAD_REQUEST,
-            SubscribeError::PoolError(_)
-            | SubscribeError::InsertSubscriberError(_)
-            | SubscribeError::TransactionCommitError(_)
-            | SubscribeError::SendEmailError(_)
-            | SubscribeError::StoreTokenError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            SubscribeError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
 
-// impl From<reqwest::Error> for SubscribeError {
-//     fn from(err: reqwest::Error) -> Self {
-//         Self::SendEmailError(err)
-//     }
-// }
+// -- -- HELPER LOGIC for SUBSCRIBE -- -- //
 
-// // impl From<sqlx::Error> for SubscribeError {
-// //     fn from(err: sqlx::Error) -> Self {
-// //         Self::DatabaseError(err)
-// //     }
-// // }
-
-// impl From<StoreTokenError> for SubscribeError {
-//     fn from(err: StoreTokenError) -> Self {
-//         Self::StoreTokenError(err)
-//     }
-// }
-
-// impl From<String> for SubscribeError {
-//     fn from(err: String) -> Self {
-//         Self::ValidationError(err)
-//     }
-// }
-
-// send confirmation email to new subscriber
+// SEND EMAIL confirmation to new subscriber
 #[tracing::instrument(
     name = "Send a confirmation email to a new subscriber",
     skip(email_client, new_subscriber, base_url, subscription_token)
@@ -222,7 +154,7 @@ pub async fn send_confirmation_email(
         .await
 }
 
-// insert subscriber into database
+// INSERT SUBSCRIBER into database
 #[tracing::instrument(
     name = "Saving new subscriber details in the database",
     skip(new_subscriber, transaction)
@@ -243,15 +175,13 @@ pub async fn insert_subscriber(
         Utc::now()
     );
 
-    transaction.execute(query).await.map_err(|e| {
-        tracing::error!("Failed to execute query: {:?}", e);
-        e
-    })?;
+    transaction.execute(query).await?;
+    // note: since propogating err upstream via '?' operator DON'T `tracing::error!` log here!
 
     Ok(subscriber_id)
 }
 
-// insert token into db
+// INSERT TOKEN into database
 #[tracing::instrument(
     name = "Store subscription token in the database",
     skip(subscription_token, transaction)
@@ -268,7 +198,7 @@ pub async fn store_token(
         subscriber_id
     );
     transaction.execute(query).await.map_err(|err| {
-        tracing::error!("Failed to execute query: {:?}", err);
+        // note: since propogating err upstream via '?' operator DON'T `tracing::error!` log here!
         // wrap underlying error
         StoreTokenError(err)
     })?;
@@ -285,13 +215,11 @@ fn generate_subscription_token() -> String {
         .collect()
 }
 
-// #[derive(Debug)] // we need to derive Debug and implement Display for our custom error type (no macro for Display)
+// ERROR HANDLING for SUBSCRIBER TOKEN
 pub struct StoreTokenError(sqlx::Error);
 
-// remove derive - make message more explicit
 impl std::fmt::Debug for StoreTokenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // write!(f, "{}\nCaused by:\n\t{}", self, self.0)
         error_chain_fmt(self, f)
     }
 }
@@ -313,6 +241,7 @@ impl std::error::Error for StoreTokenError {
     }
 }
 
+// HELPER for ERRORS: clearer error message logging / tracing -> used with `Debug` impl
 fn error_chain_fmt(
     err: &impl std::error::Error,
     f: &mut std::fmt::Formatter<'_>,

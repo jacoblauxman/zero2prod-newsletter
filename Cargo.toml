@@ -37,7 +37,7 @@ tracing-log = "0.1"
 tracing-actix-web = "0.7"        # 'drop-in' replacement of actix-web's Logger - just based on `tracing` instead of `log`
 
 secrecy = { version = "0.8", features = [
-  "serde",
+    "serde",
 ] } # wrapper for explicitly marking which fields to NOT log
 
 unicode-segmentation = "1"
@@ -55,18 +55,18 @@ rand = { version = "0.8", features = ["std_rng"] }
 version = "0.7"
 default-features = false
 features = [
-  # - sqlx uses tokio runtime for futures, rustls for TLS
-  "runtime-tokio-rustls",
-  # - macros for query! and query_as!
-  "macros",
-  # - postgres (non-standard SQL types)
-  "postgres",
-  # - uuid for SQL UUID's to Uuid type from uuid crate (id column)
-  "uuid",
-  # - chrono for SQL to DateTime<T> from chrono crate
-  "chrono",
-  # - migrate for having access to functionality via sqlx-cli for test suite
-  "migrate",
+    # - sqlx uses tokio runtime for futures, rustls for TLS
+    "runtime-tokio-rustls",
+    # - macros for query! and query_as!
+    "macros",
+    # - postgres (non-standard SQL types)
+    "postgres",
+    # - uuid for SQL UUID's to Uuid type from uuid crate (id column)
+    "uuid",
+    # - chrono for SQL to DateTime<T> from chrono crate
+    "chrono",
+    # - migrate for having access to functionality via sqlx-cli for test suite
+    "migrate",
 ]
 
 [dependencies.reqwest]

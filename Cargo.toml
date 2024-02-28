@@ -50,6 +50,8 @@ validator = "0.16"
 # for `CSPRNG` crypto-secure-pseudo-rand-num-gen on confirmation email tokens
 rand = { version = "0.8", features = ["std_rng"] }
 
+thiserror = "1" # for error handling
+
 # toml syntax for avoiding super long line:
 [dependencies.sqlx]
 version = "0.7"

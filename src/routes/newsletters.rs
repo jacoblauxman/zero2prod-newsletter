@@ -85,46 +85,6 @@ async fn get_confirmed_subscribers(
     })
     .collect();
 
-    // just need `Row` to map data coming out of query -> nested here in fn to comm coupling + keep its use contained to this scope
-    // struct Row {
-    //     email: String,
-    // }
-
-    // let rows = sqlx::query_as!(
-    //     // query_as maps retrieved rows to type specified as first arg
-    //     Row,
-    //     r#"
-    //     SELECT email
-    //     FROM subscriptions
-    //     WHERE status = 'confirmed'
-    //     "#,
-    // )
-    // .fetch_all(db_pool)
-    // .await?;
-
-    // let confirmed_subscribers = rows
-    //     .into_iter()
-    //     // allows us to return iterator containing ONLY items which closure returns `Some`
-    //     .filter_map(|row| match SubscriberEmail::parse(row.email) {
-    //         Ok(email) => Some(ConfirmedSubscriber { email }),
-    //         Err(err) => {
-    //             tracing::warn!(
-    //                 "A confirmed subscriber is using an invalid email address:\n{}",
-    //                 err
-    //             );
-    //             None
-    //         }
-    //     })
-    //     .collect();
-
-    // let confirmed_subscribers = rows
-    //     .into_iter()
-    //     .map(|row| match SubscriberEmail::parse(row.email) {
-    //         Ok(email) => Ok(ConfirmedSubscriber { email }),
-    //         Err(err) => Err(anyhow::anyhow!(err)),
-    //     })
-    //     .collect();
-
     Ok(confirmed_subscribers)
 }
 

@@ -1,6 +1,5 @@
 use crate::helpers::spawn_app;
-use wiremock::matchers::method;
-// use wiremock::matchers::path; // not in use due to how Elastic Email API setup is
+use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
@@ -10,6 +9,7 @@ async fn subscribe_returns_200_for_valid_form_data() {
     let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
 
     Mock::given(method("POST"))
+        .and(path("/emails/transactional"))
         .respond_with(ResponseTemplate::new(200))
         .mount(&app.email_server)
         .await;
@@ -27,11 +27,11 @@ async fn subscribe_persists_new_subscriber() {
     let app = spawn_app().await;
     let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
 
-    Mock::given(method("POST"))
-        // .and(path("/transactional"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&app.email_server)
-        .await;
+    // Mock::given(method("POST"))
+    //     .and(path("/emails/transactional"))
+    //     .respond_with(ResponseTemplate::new(200))
+    //     .mount(&app.email_server)
+    //     .await;
 
     // Act
     app.post_subscriptions(body.into()).await;
@@ -104,8 +104,7 @@ async fn subscribe_sends_a_confirmation_email_for_valid_data() {
     let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
 
     Mock::given(method("POST"))
-        // .and(method("POST"))
-        // .and(path("/transactional")) // removed for discrepancy between Elastic Email and PostMark
+        .and(path("/emails/transactional"))
         .respond_with(ResponseTemplate::new(200))
         .expect(1)
         .mount(&app.email_server)
@@ -125,6 +124,7 @@ async fn subscribe_sends_confirmation_email_with_link() {
     let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
 
     Mock::given(method("POST"))
+        .and(path("/emails/transactional"))
         .respond_with(ResponseTemplate::new(200))
         // no expectation, test focuses on behavior elsewhere
         .mount(&app.email_server)

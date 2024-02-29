@@ -3,5 +3,6 @@ application:
 database:
   require_ssl: true
 email_client:
-  base_url: "https://api.elasticemail.com/v4/emails/transactional"
+  base_url: "https://api.elasticemail.com/v4"
+  # base_url: "https://api.elasticemail.com/v4/emails/transactional"
   sender_email: "jlauxman@gmail.com"

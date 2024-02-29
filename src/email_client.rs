@@ -32,7 +32,9 @@ impl EmailClient {
         html_content: &str,
         text_content: &str,
     ) -> Result<(), reqwest::Error> {
-        let url = &self.base_url;
+        // let url = &self.base_url;
+        // update for integration with Elastic Email API
+        let url = format!("{}/emails/transactional", self.base_url);
         let req_body = SendEmailRequest {
             from: self.sender.as_ref(),
             to: recipient.as_ref(),
@@ -68,6 +70,8 @@ struct SendEmailRequest<'a> {
     html_body: &'a str,
     text_body: &'a str,
 }
+
+// -- TESTING -- //
 
 #[cfg(test)]
 mod tests {
@@ -140,7 +144,8 @@ mod tests {
 
         Mock::given(header_exists("X-ElasticEmail-ApiKey"))
             .and(header("Content-Type", "application/json"))
-            // .and(path("/email")) // not used with Elastic Email, example of Postmark's from zero2prod
+            .and(path("/emails/transactional"))
+            // change from zero2prod re: using Elastic Email v. Postmark
             .and(method("POST"))
             // using custom body matcher for req checking via wiremock::Match
             .and(SendEmailBodyMatcher)

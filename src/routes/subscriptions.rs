@@ -215,7 +215,7 @@ fn generate_subscription_token() -> String {
         .collect()
 }
 
-// ERROR HANDLING for SUBSCRIBER TOKEN
+// -- ERROR HANDLING for SUBSCRIBER TOKEN -- //
 pub struct StoreTokenError(sqlx::Error);
 
 impl std::fmt::Debug for StoreTokenError {
@@ -242,7 +242,7 @@ impl std::error::Error for StoreTokenError {
 }
 
 // HELPER for ERRORS: clearer error message logging / tracing -> used with `Debug` impl
-fn error_chain_fmt(
+pub fn error_chain_fmt(
     err: &impl std::error::Error,
     f: &mut std::fmt::Formatter<'_>,
 ) -> std::fmt::Result {

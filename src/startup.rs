@@ -1,6 +1,6 @@
 use crate::configuration::{DatabaseSettings, Settings};
 use crate::email_client::EmailClient;
-use crate::routes::{confirm, health_check, subscribe};
+use crate::routes::{confirm, health_check, publish_newsletter, subscribe};
 
 use actix_web::dev::Server;
 use actix_web::{web, App, HttpServer};
@@ -61,8 +61,9 @@ impl Application {
 }
 
 // wrapper type defined to retrieve URL in `subscribe` handler
-// - note: retrieval from context in actix-web is type-based: using raw `String` would expose conflicts
+// - note: retrieval from context in actix-web is type-based: using raw `String` would expose "conflicts"
 pub struct ApplicationBaseUrl(pub String);
+
 pub fn run(
     listener: TcpListener,
     conn: PgPool,
@@ -81,6 +82,7 @@ pub fn run(
             // middleware is added using `wrap` on `App`
             .wrap(TracingLogger::default())
             .route("/health_check", web::get().to(health_check))
+            .route("/newsletters", web::post().to(publish_newsletter))
             .route("/subscriptions", web::post().to(subscribe))
             .route("/subscriptions/confirm", web::get().to(confirm))
             // register db conn as part of app state

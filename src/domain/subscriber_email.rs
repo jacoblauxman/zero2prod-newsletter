@@ -19,6 +19,14 @@ impl AsRef<str> for SubscriberEmail {
     }
 }
 
+// need for display info via `/newsletter`
+impl std::fmt::Display for SubscriberEmail {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // simply forward to `Display`'s impl on wrapped String type
+        self.0.fmt(f)
+    }
+}
+
 #[cfg(test)]
 
 mod tests {

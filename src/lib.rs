@@ -1,3 +1,5 @@
+// use argon2::Algorithm;
+
 pub mod configuration;
 pub mod domain;
 pub mod email_client;

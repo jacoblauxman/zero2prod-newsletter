@@ -56,9 +56,8 @@ anyhow = "1"    # wrapper for dynamic error types - allows context enrichment of
 # for use with extracting credentials (in base64 encoding) from headers
 base64 = "0.21"
 
-# crate implementation of SHA-3 - basic password hashing
-sha3 = "0.9"
 
+# for auth / hashing
 argon2 = { version = "0.4", features = ["std"] }
 
 # Argon2id - recommended by OWASP re: "correct" hasing algo

@@ -51,8 +51,8 @@ pub async fn subscribe(
     base_url: web::Data<ApplicationBaseUrl>,
 ) -> Result<HttpResponse, SubscribeError> {
     // get subscriber data from form input
-    let new_subscriber = form.0.try_into().map_err(SubscribeError::ValidationError)?;
     // note: no longer have #[from] for `SubscribeError::ValidationError` - have to map explicitly because `String` doesn't impl Error trait and can't be returned in Error::source (used `None` for error case handling prior)
+    let new_subscriber = form.0.try_into().map_err(SubscribeError::ValidationError)?;
     // `begin` acquires connection from the db's pool to kick off transaction -- provides way to convert multi-steps of db interaction into 'all-or-nothing'
     let mut transaction = db_pool
         .begin()

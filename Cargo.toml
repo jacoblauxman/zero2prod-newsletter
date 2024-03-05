@@ -53,6 +53,9 @@ rand = { version = "0.8", features = ["std_rng"] }
 thiserror = "1" # for procedural macros + error handling
 anyhow = "1"    # wrapper for dynamic error types - allows context enrichment of errors
 
+# for use with extracting credentials (in base64 encoding) from headers
+base64 = "0.21"
+
 # toml syntax for avoiding super long line:
 [dependencies.sqlx]
 version = "0.7"

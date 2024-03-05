@@ -1,7 +1,6 @@
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHasher};
 use once_cell::sync::Lazy;
-use sha3::Digest;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 use wiremock::MockServer;
@@ -74,23 +73,12 @@ impl TestApp {
         reqwest::Client::new()
             .post(&format!("{}/newsletters", &self.address))
             // randomized credentials - now created in `spawn_app`
-            // .basic_auth(Uuid::new_v4().to_string(), Some(Uuid::new_v4().to_string()))
-            // .basic_auth(username, Some(password))
             .basic_auth(&self.test_user.username, Some(&self.test_user.password))
             .json(&body)
             .send()
             .await
             .expect("Failed to execute POST request")
     }
-
-    // for retrieving generated username + password (testing) -- needed for POST to `/newsletters`
-    // pub async fn test_user(&self) -> (String, String) {
-    //     let row = sqlx::query!("SELECT username, password FROM users LIMIT 1",)
-    //         .fetch_one(&self.db_pool)
-    //         .await
-    //         .expect("Failed to create test users for test app");
-    //     (row.username, row.password)
-    // }
 }
 
 pub struct TestUser {
@@ -109,10 +97,7 @@ impl TestUser {
     }
 
     async fn store(&self, db_pool: &PgPool) {
-        // let password_hash = sha3::Sha3_256::digest(self.password.as_bytes());
-        // let password_hash = format!("{:x}", password_hash);
         let salt = SaltString::generate(&mut rand::thread_rng());
-
         let password_hash = Argon2::default()
             .hash_password(self.password.as_bytes(), &salt)
             .unwrap()
@@ -207,15 +192,3 @@ pub struct ConfirmationLinks {
     pub html: reqwest::Url,
     pub plain_text: reqwest::Url,
 }
-
-// async fn add_test_user(db_pool: &PgPool) {
-//     sqlx::query!(
-//         "INSERT INTO users (user_id, username, password) VALUES ($1, $2, $3)",
-//         Uuid::new_v4(),
-//         Uuid::new_v4().to_string(),
-//         Uuid::new_v4().to_string(),
-//     )
-//     .execute(db_pool)
-//     .await
-//     .expect("Failed to create test users in test app");
-// }

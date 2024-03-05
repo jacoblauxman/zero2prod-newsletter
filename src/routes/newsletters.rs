@@ -8,7 +8,8 @@ use actix_web::{
 };
 use anyhow::Context;
 use base64::Engine;
-use secrecy::Secret;
+use secrecy::{ExposeSecret, Secret};
+use sha3::Digest;
 use sqlx::PgPool;
 
 // handling json data shape
@@ -26,6 +27,9 @@ pub struct Content {
 
 // -- PUBLISH -- //
 
+#[tracing::instrument(name = "Publish a newsletter",
+    skip(body, db_pool, email_client, req),
+    fields(username=tracing::field::Empty, user_id=tracing::field::Empty))]
 pub async fn publish_newsletter(
     body: web::Json<BodyData>,
     db_pool: web::Data<PgPool>,
@@ -33,7 +37,11 @@ pub async fn publish_newsletter(
     req: HttpRequest,
 ) -> Result<HttpResponse, PublishError> {
     // we ensure we bubble up error when extracting headers + credentials from request
-    let _credentials = basic_authentication(req.headers()).map_err(PublishError::AuthError)?;
+    let credentials = basic_authentication(req.headers()).map_err(PublishError::AuthError)?;
+    tracing::Span::current().record("username", &tracing::field::display(&credentials.username));
+    // validate via db credential info
+    let user_id = validate_credentials(credentials, &db_pool).await?;
+    tracing::Span::current().record("user_id", &tracing::field::display(&user_id));
 
     let subscribers = get_confirmed_subscribers(&db_pool).await?;
 
@@ -108,6 +116,32 @@ fn basic_authentication(headers: &HeaderMap) -> Result<Credentials, anyhow::Erro
         username,
         password: Secret::new(password),
     })
+}
+
+async fn validate_credentials(
+    credentials: Credentials,
+    db_pool: &PgPool,
+) -> Result<uuid::Uuid, PublishError> {
+    let password_hash = sha3::Sha3_256::digest(credentials.password.expose_secret().as_bytes());
+    // convert to &str type from &[u8]-ish slice
+    let password_hash = format!("{:x}", password_hash); // converts to hexidecimal (lowercase)
+    let user_id: Option<_> = sqlx::query!(
+        r#"
+        SELECT user_id
+        FROM users
+        WHERE username = $1 AND password_hash = $2"#,
+        credentials.username,
+        password_hash
+    )
+    .fetch_optional(db_pool)
+    .await
+    .context("Failed to perform query to validate AUTH credentials")
+    .map_err(PublishError::UnexpectedError)?;
+
+    user_id
+        .map(|row| row.user_id)
+        .ok_or_else(|| anyhow::anyhow!("Invalid username or password"))
+        .map_err(PublishError::AuthError)
 }
 
 struct ConfirmedSubscriber {

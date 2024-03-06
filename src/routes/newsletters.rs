@@ -139,14 +139,13 @@ async fn validate_credentials(
     );
 
     if let Some((stored_user_id, stored_password_hash)) =
-        get_stored_credentials(&credentials.username, &db_pool)
+        get_stored_credentials(&credentials.username, db_pool)
             .await
             .map_err(PublishError::UnexpectedError)?
     {
         user_id = Some(stored_user_id);
         expected_password_hash = stored_password_hash;
     }
-    // .ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Unknown username")))?
 
     spawn_blocking_with_tracing(move || {
         verify_password_hash(expected_password_hash, credentials.password)

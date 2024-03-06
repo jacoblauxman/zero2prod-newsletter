@@ -1,6 +1,7 @@
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
 use crate::routes::error_chain_fmt;
+use crate::telemetry::spawn_blocking_with_tracing;
 use actix_web::{
     http::header::{HeaderMap, HeaderValue},
     http::{header, StatusCode},
@@ -85,6 +86,7 @@ struct Credentials {
     password: Secret<String>,
 }
 
+// helper: set request's headers check and credential confirmation
 fn basic_authentication(headers: &HeaderMap) -> Result<Credentials, anyhow::Error> {
     let header_value = headers
         .get("Authorization")
@@ -120,70 +122,45 @@ fn basic_authentication(headers: &HeaderMap) -> Result<Credentials, anyhow::Erro
     })
 }
 
+// validation / auth logic
 #[tracing::instrument(name = "Validate credentials", skip(credentials, db_pool))]
 async fn validate_credentials(
     credentials: Credentials,
     db_pool: &PgPool,
 ) -> Result<uuid::Uuid, PublishError> {
-    // let row: Option<_> = sqlx::query!(
-    //     r#"
-    //     SELECT user_id, password_hash
-    //     FROM users
-    //     WHERE username = $1
-    //     "#,
-    //     credentials.username,
-    //     // password_hash
-    // )
-    // .fetch_optional(db_pool)
-    // .await
-    // .context("Failed to perform query to retrieve AUTH credentials")
-    // .map_err(PublishError::UnexpectedError)?;
+    // initialized fields to ensure no early return on `401` (obscure whether input data exists in db, mask response times in both scenarios to "same")
+    // ie. no statistically significant time diff between 'ok' and 'bad' res from user/outsider perspective
+    let mut user_id = None;
+    let mut expected_password_hash = Secret::new(
+        "$argon2id$v=19$m=15000,t=2,p=1$\
+            gZiV/M1gPc22ElAH/Jh1Hw$\
+            CWOrkoo7oJBQ/iyh7uJ0LO2aLEfrHwTWllSAxT0zRno"
+            .to_string(),
+    );
 
-    // let (expected_password_hash, user_id) = match row {
-    //     Some(row) => (row.password_hash, row.user_id),
-    //     None => {
-    //         return Err(PublishError::AuthError(anyhow::anyhow!("Unknown username")));
-    //     }
-    // };
+    if let Some((stored_user_id, stored_password_hash)) =
+        get_stored_credentials(&credentials.username, &db_pool)
+            .await
+            .map_err(PublishError::UnexpectedError)?
+    {
+        user_id = Some(stored_user_id);
+        expected_password_hash = stored_password_hash;
+    }
+    // .ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Unknown username")))?
 
-    // let expected_password_hash = PasswordHash::new(&expected_password_hash)
-    //     .context("Failed to parse hash in PHC string format")
-    //     .map_err(PublishError::UnexpectedError)?;
-    let (user_id, expected_password_hash) = get_stored_credentials(&credentials.username, &db_pool)
-        .await
-        .map_err(PublishError::UnexpectedError)?
-        .ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Unknown username")))?;
-
-    // let expected_password_hash = PasswordHash::new(&expected_password_hash.expose_secret())
-    //     .context("Failed to parse hash in PHC string format")
-    //     .map_err(PublishError::UnexpectedError)?;
-
-    // reserving a thread via tokio for our conn to the db (blocking op)
-    tokio::task::spawn_blocking(move || {
+    spawn_blocking_with_tracing(move || {
         verify_password_hash(expected_password_hash, credentials.password)
     })
     .await
     .context("Failed to spawn blocking task")
     .map_err(PublishError::UnexpectedError)??;
-    // tokio::task::spawn_blocking(move || {
-    //     tracing::info_span!("Verify password hash").in_scope(|| {
-    //         Argon2::default().verify_password(
-    //             credentials.password.expose_secret().as_bytes(),
-    //             &expected_password_hash,
-    //         )
-    //     })
-    // })
-    // .await
-    // // spawn_blocking fallible - nested `Result`
-    // .context("failed to spawn blocking task")
-    // .map_err(PublishError::UnexpectedError)?
-    // .context("Invalid password")
-    // .map_err(PublishError::AuthError)?;
 
-    Ok(user_id)
+    // only set user_id to `Some` if found credentials (the USER) in store
+    // -> even if default password ends up matching (!?) with provided password, never auth non-existant user
+    user_id.ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Unknown username")))
 }
 
-// helper / logic extracted for validating credentials + individual span
+// helper / logic extracted for validating credentials + individual span from db
 #[tracing::instrument(name = "Get stored credentials", skip(username, db_pool))]
 async fn get_stored_credentials(
     username: &str,
@@ -203,6 +180,7 @@ async fn get_stored_credentials(
     Ok(row)
 }
 
+// helper: comparing supplied vs expected pw hash
 #[tracing::instrument(
     name = "Verify password hash",
     skip(expected_password_hash, password_candidate)

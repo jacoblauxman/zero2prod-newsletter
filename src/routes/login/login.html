@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+        <title>Login</title>
+    </head>
+
+    <body>
+        <!-- by setting method to `post` input data is passed in req body (vs query params in the url by performing default `get`!) -->
+        <form action="/login" method="post">
+            <label
+                >Username
+                <input
+                    type="text"
+                    placeholder="Enter Username"
+                    name="username"
+                />
+            </label>
+            <label>
+                Password
+                <input
+                    type="password"
+                    placeholder="Enter Password"
+                    name="password"
+                />
+                <!-- `password` type obfuscates text input (vs `text`) -->
+            </label>
+            <button type="submit">Login</button>
+        </form>
+    </body>
+</html>

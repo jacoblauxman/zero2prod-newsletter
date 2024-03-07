@@ -4,7 +4,7 @@ use crate::startup::HmacSecret;
 use actix_web::cookie::Cookie;
 use actix_web::http::header::LOCATION;
 use actix_web::{web, HttpResponse};
-use hmac::{Hmac, Mac};
+// use hmac::{Hmac, Mac};
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 // can be built from `HttpResponse` and an err

@@ -67,12 +67,18 @@ urlencoding = "2"
 # for "html entity encoding" - prevents XSS / insertion of html eles by escaping chars (ie & to &amp, / to &#x2F)
 htmlescape = "0.3"
 
+# NOTE: all removed for update from query params to cookies
+
+#
+
 # for MAC / HMAC (hash message authentication code, hashing via sha2) to verify query parms (prevents tampering via 3rd party)
-hmac = { version = "0.12", features = ["std"] }
-sha2 = "0.10"
+# hmac = { version = "0.12", features = ["std"] }
+# sha2 = "0.10"
 
 # for converting hmac `tag` values - encoded as hex string -> decode back to bytes in `GET /login`
-hex = "0.4"
+# hex = "0.4"
+
+#
 
 # toml syntax for avoiding super long line:
 [dependencies.sqlx]

@@ -23,6 +23,8 @@ static TRACING: Lazy<()> = Lazy::new(|| {
     }
 });
 
+// -- TEST APP LOGIC -- //
+
 pub struct TestApp {
     pub address: String,
     pub db_pool: PgPool,
@@ -30,11 +32,16 @@ pub struct TestApp {
     // for handling `/subscriptions/confirm` testing
     pub port: u16,
     pub test_user: TestUser,
+    // for config of `ClientBuilder::cookie_store` re: reqwest -
+    // this stored 'client' allows cookie propagation throughout various tests
+    pub api_client: reqwest::Client,
 }
 
 impl TestApp {
     pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
-        reqwest::Client::new()
+        // reqwest::Client::new()
+        // now using shared api_client setup:
+        self.api_client
             .post(&format!("{}/subscriptions", &self.address))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .body(body)
@@ -70,7 +77,9 @@ impl TestApp {
     // for firing `POST` to `/newsletters`
     pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
         // let (username, password) = self.test_user().await;
-        reqwest::Client::new()
+        // reqwest::Client::new()
+        // updated with shared api_client setup:
+        self.api_client
             .post(&format!("{}/newsletters", &self.address))
             // randomized credentials - now created in `spawn_app`
             .basic_auth(&self.test_user.username, Some(&self.test_user.password))
@@ -86,17 +95,34 @@ impl TestApp {
         Body: serde::Serialize,
     {
         // reqwest::Client::new()
-        reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none()) // by default, reqwest's `Client` will see a 303 redirect and automatically call `GET` on path from `Location` header (gives a 200 instead -- does this up to 10x re: 'hopping' redirects)
-            .build()
-            .unwrap()
+        // reqwest::Client::builder()
+        // updated with shared api_client field:
+        self.api_client
+            // .redirect(reqwest::redirect::Policy::none()) // by default, reqwest's `Client` will see a 303 redirect and automatically call `GET` on path from `Location` header (gives a 200 instead -- does this up to 10x re: 'hopping' redirects)
+            // .build()
+            // .unwrap()
             .post(&format!("{}/login", &self.address))
             .form(body)
             .send()
             .await
             .expect("Failed to execute POST req to `/login` in test")
     }
+
+    // for testing view of HTML page, no need to expose reqwest::Response -- just return the raw text from response body
+    pub async fn get_login_html(&self) -> String {
+        // reqwest::Client::new()
+        self.api_client
+            .get(&format!("{}/login", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request")
+            .text()
+            .await
+            .unwrap()
+    }
 }
+
+// -- TEST USER LOGIC -- //
 
 pub struct TestUser {
     pub user_id: Uuid,
@@ -171,6 +197,13 @@ pub async fn spawn_app() -> TestApp {
     // run server
     let _ = tokio::spawn(application.run_until_stopped());
 
+    // create reqwest::Client for `api_client` and cookie propagation in tests
+    let api_client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none()) // by default, reqwest's `Client` will see a 303 redirect and automatically call `GET` on path from `Location` header (gives a 200 instead -- does this up to 10x re: 'hopping' redirects)
+        .cookie_store(true)
+        .build()
+        .unwrap();
+
     // create app via config
     let test_app = TestApp {
         address,
@@ -180,6 +213,7 @@ pub async fn spawn_app() -> TestApp {
         email_server,
         port: app_port,
         test_user: TestUser::generate(),
+        api_client,
     };
 
     // create test user + credentials

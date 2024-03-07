@@ -1,6 +1,5 @@
 use crate::helpers::spawn_app;
-use wiremock::matchers::method;
-// use wiremock::matchers::path; // not in use currently
+use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
@@ -10,7 +9,7 @@ async fn link_returned_by_subscribe_returns_200_if_called() {
     let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
 
     Mock::given(method("POST"))
-        // .and(path("/transactional"))
+        .and(path("/emails/transactional"))
         .respond_with(ResponseTemplate::new(200))
         .mount(&app.email_server)
         .await;
@@ -47,7 +46,7 @@ async fn clicking_confirmation_link_confirms_subscriber() {
     let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
 
     Mock::given(method("POST"))
-        // .and(path("/transactional"))
+        .and(path("/emails/transactional"))
         .respond_with(ResponseTemplate::new(200))
         .mount(&app.email_server)
         .await;

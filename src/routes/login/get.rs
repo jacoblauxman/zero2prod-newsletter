@@ -1,63 +1,30 @@
-// use crate::startup::HmacSecret;
-use actix_web::{http::header::ContentType, web, HttpRequest, HttpResponse};
-// use hmac::{Hmac, Mac};
-use secrecy::ExposeSecret;
+use actix_web::{cookie::Cookie, http::header::ContentType, HttpRequest, HttpResponse};
+use actix_web_flash_messages::{IncomingFlashMessages, Level};
+use std::fmt::Write;
 
-// #[derive(serde::Deserialize)]
-// pub struct QueryParams {
-//     // we've encoded any potential err msg from LoginError to pass via query params in response redirect url!
-//     error: String,
-//     tag: String, // for our HMAC tag
-// }
-
-// impl QueryParams {
-//     // method for returning err string for query params if msg auth code matches expectations -> otherwise ERR (ie. )
-//     fn verify(self, secret: &HmacSecret) -> Result<String, anyhow::Error> {
-//         let tag = hex::decode(self.tag)?; // our hmac tag was encoded as hexidecimal, decode back to bytes!
-//         let query_str = format!("error={}", urlencoding::Encoded::new(&self.error));
-
-//         let mut mac =
-//             Hmac::<sha2::Sha256>::new_from_slice(secret.0.expose_secret().as_bytes()).unwrap();
-//         mac.update(query_str.as_bytes());
-//         // confirms tag matches hmac secret as expected
-//         mac.verify_slice(&tag)?;
-
-//         Ok(self.error)
-//     }
-// }
-
-pub async fn login_form(
-    // query: Option<web::Query<QueryParams>>,
-    // secret: web::Data<HmacSecret>,
-    req: HttpRequest,
-) -> HttpResponse {
+// no longer need access to raw req
+pub async fn login_form(flash_messages: IncomingFlashMessages) -> HttpResponse {
     // UPDATE: using cookies now as opposed to HMAC + query params
-    let err_html = match req.cookie("_flash") {
-        None => "".into(),
-        Some(cookie) => {
-            format!("<p><i>{}</i></p>", cookie.value())
-        }
-    };
-
-    // our `query` is now optional - however, if present needs ALL fields (error and hmac tag)
-    // let err_html = todo!();
-    //     match query {
+    // let err_html = match req.cookie("_flash") {
     //     None => "".into(),
-    //     Some(query) => match query.0.verify(&secret) {
-    //         Ok(err) => {
-    //             format!("<p><i>{}</i></p>", htmlescape::encode_minimal(&err))
-    //             // `htmlescape` escapes html chars w/ entity-encoding (for XSS prevention)
-    //         }
-    //         // this error is caused to mismatch in HMAC tag secret and request `query` (after verification)
-    //         Err(err) => {
-    //             tracing::warn!(error.message = %err,  error.cause_chain = ?err, "Failed to verify query params using the HMAC tag");
-    //             "".into()
-    //         }
-    //     },
+    //     Some(cookie) => {
+    //         format!("<p><i>{}</i></p>", cookie.value())
+    //     }
     // };
+
+    let mut err_html = String::new();
+    for msg in flash_messages
+        .iter()
+        .filter(|msg| msg.level() == Level::Error)
+    {
+        writeln!(err_html, "<p><i>{}</i></p>", msg.content()).unwrap();
+    }
 
     HttpResponse::Ok()
         .content_type(ContentType::html())
+        // adjust req handler to set "Max-Age" property of login cookie to 0 (expires immediately / clears)
+        // .cookie(Cookie::build("_flash", "").max_age(Duration::ZERO).finish())
+        // clarified by helper method `add_removal_cookie` used below from storing `res`
         .body(format!(
             r#"<!DOCTYPE html>
 <html lang="en">
@@ -87,4 +54,8 @@ pub async fn login_form(
 </body>
 </html>"#,
         ))
+
+    // NOTE: actix_web_flash_messages now handles cookie setting and properties as well as removal!
+    // res.add_removal_cookie(&Cookie::new("_flash", "")).unwrap(); // does the same as setting "Max-Age" to 0
+    // res
 }

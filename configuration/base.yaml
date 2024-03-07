@@ -1,7 +1,7 @@
 application:
   port: 8000
   host: 0.0.0.0
-  hmac_secret: "long-and-very-secret-random-key-needed-to-verify-msg-integrity"
+  hmac_secret: "long-long-long-and-very-secret-random-key-needed-to-verify-msg-integrity"
   # note: need to set `APP_APPLICATION__HMAC_SECRET` env variable re: DigitalOcean prod
 database:
   host: "localhost"

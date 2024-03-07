@@ -80,6 +80,9 @@ htmlescape = "0.3"
 
 #
 
+# framework for flash  messages - modeled after Django's msg framework
+actix-web-flash-messages = { version = "0.4", features = ["cookies"] }
+
 # toml syntax for avoiding super long line:
 [dependencies.sqlx]
 version = "0.7"

@@ -39,8 +39,6 @@ pub struct TestApp {
 
 impl TestApp {
     pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
-        // reqwest::Client::new()
-        // now using shared api_client setup:
         self.api_client
             .post(&format!("{}/subscriptions", &self.address))
             .header("Content-Type", "application/x-www-form-urlencoded")
@@ -76,9 +74,6 @@ impl TestApp {
 
     // for firing `POST` to `/newsletters`
     pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
-        // let (username, password) = self.test_user().await;
-        // reqwest::Client::new()
-        // updated with shared api_client setup:
         self.api_client
             .post(&format!("{}/newsletters", &self.address))
             // randomized credentials - now created in `spawn_app`
@@ -94,13 +89,7 @@ impl TestApp {
     where
         Body: serde::Serialize,
     {
-        // reqwest::Client::new()
-        // reqwest::Client::builder()
-        // updated with shared api_client field:
         self.api_client
-            // .redirect(reqwest::redirect::Policy::none()) // by default, reqwest's `Client` will see a 303 redirect and automatically call `GET` on path from `Location` header (gives a 200 instead -- does this up to 10x re: 'hopping' redirects)
-            // .build()
-            // .unwrap()
             .post(&format!("{}/login", &self.address))
             .form(body)
             .send()
@@ -217,7 +206,6 @@ pub async fn spawn_app() -> TestApp {
     };
 
     // create test user + credentials
-    // add_test_user(&test_app.db_pool).await;
     test_app.test_user.store(&test_app.db_pool).await;
     test_app
 }

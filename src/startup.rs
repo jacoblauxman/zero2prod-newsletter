@@ -4,9 +4,12 @@ use crate::routes::{
     confirm, health_check, home, login, login_form, publish_newsletter, subscribe,
 };
 
+use actix_web::cookie::Key;
 use actix_web::dev::Server;
 use actix_web::{web, App, HttpServer};
-use secrecy::Secret;
+use actix_web_flash_messages::storage::CookieMessageStore;
+use actix_web_flash_messages::FlashMessagesFramework;
+use secrecy::{ExposeSecret, Secret};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::net::TcpListener;
@@ -86,10 +89,15 @@ pub fn run(
     let email_client = web::Data::new(email_client);
     // wrap db connection (non-cloneable TCP connection with Postgres) in smart pointer (ARC) -- pointer to PgConnection
     let db_pool = web::Data::new(conn);
+    // cookie storage + flash msg handling
+    let message_store =
+        CookieMessageStore::builder(Key::from(hmac_secret.expose_secret().as_bytes())).build();
+    let message_framework = FlashMessagesFramework::builder(message_store).build();
     // we have to capture `conn` from outer scope to use in innner scope
     let server = HttpServer::new(move || {
         App::new()
             // middleware is added using `wrap` on `App`
+            .wrap(message_framework.clone()) // allows for flash msgs re: signed cookies
             .wrap(TracingLogger::default())
             .route("/", web::get().to(home))
             .route("/login", web::get().to(login_form))
@@ -117,7 +125,6 @@ pub async fn get_connection_pool(configuration: &DatabaseSettings) -> Result<PgP
     PgPoolOptions::new()
         .connect_with(configuration.with_db())
         .await
-    // PgPoolOptions::new().connect_lazy_with(configuration.with_db())
 }
 
 // wrapper type to avoid conflicts re: use of `Secret<String>` as type injected for HMAC value (registering another `Secret<String>` could override)

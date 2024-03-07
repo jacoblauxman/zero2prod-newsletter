@@ -27,12 +27,6 @@ async fn subscribe_persists_new_subscriber() {
     let app = spawn_app().await;
     let body = "name=mj%20hohams&email=mj%5Fhohams%40gmail.com";
 
-    // Mock::given(method("POST"))
-    //     .and(path("/emails/transactional"))
-    //     .respond_with(ResponseTemplate::new(200))
-    //     .mount(&app.email_server)
-    //     .await;
-
     // Act
     app.post_subscriptions(body.into()).await;
 

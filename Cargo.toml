@@ -83,6 +83,11 @@ htmlescape = "0.3"
 # framework for flash  messages - modeled after Django's msg framework
 actix-web-flash-messages = { version = "0.4", features = ["cookies"] }
 
+# for session management via `SessionMiddleware` type - loads, tracks changes to state and persists this data at end of req/res cycle
+actix-session = { version = "0.7", features = [
+    "redis-rs-tls-sesssion",
+] } # flag for enabling Redis / `RedisSessionStore`
+
 # toml syntax for avoiding super long line:
 [dependencies.sqlx]
 version = "0.7"

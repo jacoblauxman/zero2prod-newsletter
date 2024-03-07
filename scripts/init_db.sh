@@ -7,7 +7,6 @@
 set -x
 set -eo pipefail
 
-
 # Tests dependencies (psql, sqlx) are installed before running the rest of script:
 if ! [ -x "$(command -v psql)" ]; then
   echo >&2 "Error: psql is not installed."

@@ -10,6 +10,8 @@ pub struct Settings {
     // pub application_port: u16,
     pub application: ApplicationSettings,
     pub email_client: EmailClientSettings,
+    // URI marked secret because it may embed password
+    pub redis_uri: Secret<String>,
 }
 
 #[derive(serde::Deserialize, Clone)]

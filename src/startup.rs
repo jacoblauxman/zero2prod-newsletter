@@ -4,6 +4,7 @@ use crate::routes::{
     confirm, health_check, home, login, login_form, publish_newsletter, subscribe,
 };
 
+use actix_session::{storage::RedisSessionStore, SessionMiddleware};
 use actix_web::cookie::Key;
 use actix_web::dev::Server;
 use actix_web::{web, App, HttpServer};
@@ -54,6 +55,7 @@ impl Application {
             email_client,
             configuration.application.base_url,
             configuration.application.hmac_secret,
+            configuration.redis_uri,
         )?;
         // allows saving of bound port to Application
         Ok(Self { port, server })
@@ -82,22 +84,33 @@ pub fn run(
     email_client: EmailClient,
     base_url: String,
     hmac_secret: Secret<String>,
-) -> Result<Server, std::io::Error> {
+    redis_uri: Secret<String>,
+) -> Result<Server, anyhow::Error> {
+    // note: new error response (from std::io::Error)
     // context for base url - dependent on env
     let base_url = web::Data::new(ApplicationBaseUrl(base_url));
     // context for email client's API
     let email_client = web::Data::new(email_client);
     // wrap db connection (non-cloneable TCP connection with Postgres) in smart pointer (ARC) -- pointer to PgConnection
     let db_pool = web::Data::new(conn);
+    // for session token and setup of session storage
+    let secret_key = Key::from(hmac_secret.expose_secret().as_bytes());
     // cookie storage + flash msg handling
-    let message_store =
-        CookieMessageStore::builder(Key::from(hmac_secret.expose_secret().as_bytes())).build();
+    let message_store = CookieMessageStore::builder(secret_key.clone()).build();
     let message_framework = FlashMessagesFramework::builder(message_store).build();
+    // instantiate our Redis session store from uri conn string
+    let redis_store = RedisSessionStore::new(redis_uri.expose_secret()).await?;
     // we have to capture `conn` from outer scope to use in innner scope
     let server = HttpServer::new(move || {
         App::new()
             // middleware is added using `wrap` on `App`
-            .wrap(message_framework.clone()) // allows for flash msgs re: signed cookies
+            // allows for flash msgs re: signed cookies
+            .wrap(message_framework.clone())
+            // allows access to session via Redis
+            .wrap(SessionMiddleware::new(
+                redis_store.clone(),
+                secret_key.clone(),
+            )) // session wrapper for entire app
             .wrap(TracingLogger::default())
             .route("/", web::get().to(home))
             .route("/login", web::get().to(login_form))

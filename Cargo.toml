@@ -97,7 +97,7 @@ features = [
 version = "0.11"
 default-features = false
 # need `json` flag to ser/deser JSON payloads
-features = ["json", "rustls-tls"]
+features = ["json", "rustls-tls", "cookies"] # updated to use cookies feature
 
 [dev-dependencies]
 # reqwest = "0.11"

@@ -79,6 +79,23 @@ impl TestApp {
             .await
             .expect("Failed to execute POST request")
     }
+
+    // for firing `POST` to `/login`
+    pub async fn post_login<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
+        // reqwest::Client::new()
+        reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none()) // by default, reqwest's `Client` will see a 303 redirect and automatically call `GET` on path from `Location` header (gives a 200 instead -- does this up to 10x re: 'hopping' redirects)
+            .build()
+            .unwrap()
+            .post(&format!("{}/login", &self.address))
+            .form(body)
+            .send()
+            .await
+            .expect("Failed to execute POST req to `/login` in test")
+    }
 }
 
 pub struct TestUser {
@@ -157,7 +174,9 @@ pub async fn spawn_app() -> TestApp {
     // create app via config
     let test_app = TestApp {
         address,
-        db_pool: get_connection_pool(&configuration.database),
+        db_pool: get_connection_pool(&configuration.database)
+            .await
+            .expect("Failed to connect to the database"),
         email_server,
         port: app_port,
         test_user: TestUser::generate(),
@@ -190,6 +209,12 @@ async fn configure_database(configuration: &DatabaseSettings) -> PgPool {
         .expect("Failed to migrate the db");
 
     conn_pool
+}
+
+// this helper checks the value of `Location` header (re: auth) for redirect responses
+pub fn assert_is_redirect_to(res: &reqwest::Response, location: &str) {
+    assert_eq!(res.status().as_u16(), 303);
+    assert_eq!(res.headers().get("Location").unwrap(), location);
 }
 
 // Confirmation links embedded in req to email API

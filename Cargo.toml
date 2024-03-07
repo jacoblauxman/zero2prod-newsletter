@@ -71,6 +71,9 @@ htmlescape = "0.3"
 hmac = { version = "0.12", features = ["std"] }
 sha2 = "0.10"
 
+# for converting hmac `tag` values - encoded as hex string -> decode back to bytes in `GET /login`
+hex = "0.4"
+
 # toml syntax for avoiding super long line:
 [dependencies.sqlx]
 version = "0.7"

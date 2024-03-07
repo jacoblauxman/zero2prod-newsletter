@@ -6,6 +6,7 @@ use crate::routes::{
 
 use actix_web::dev::Server;
 use actix_web::{web, App, HttpServer};
+use secrecy::Secret;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::net::TcpListener;
@@ -19,7 +20,10 @@ pub struct Application {
 
 impl Application {
     pub async fn build(configuration: Settings) -> Result<Self, std::io::Error> {
-        let conn_pool = PgPoolOptions::new().connect_lazy_with(configuration.database.with_db());
+        // let conn_pool = PgPoolOptions::new().connect_lazy_with(configuration.database.with_db());
+        let conn_pool = get_connection_pool(&configuration.database)
+            .await
+            .expect("Failed to connect to Postgres db");
 
         let sender_email = configuration
             .email_client
@@ -46,6 +50,7 @@ impl Application {
             conn_pool,
             email_client,
             configuration.application.base_url,
+            configuration.application.hmac_secret,
         )?;
         // allows saving of bound port to Application
         Ok(Self { port, server })
@@ -73,6 +78,7 @@ pub fn run(
     conn: PgPool,
     email_client: EmailClient,
     base_url: String,
+    hmac_secret: Secret<String>,
 ) -> Result<Server, std::io::Error> {
     // context for base url - dependent on env
     let base_url = web::Data::new(ApplicationBaseUrl(base_url));
@@ -97,6 +103,8 @@ pub fn run(
             // since EC has two data fields (base_url and sender) along with Client, share (wrapped via Ac) amongst all App instances (one per thread)
             .app_data(email_client.clone())
             .app_data(base_url.clone())
+            // injecting secret used by HMAC's to app state
+            .app_data(web::Data::new(HmacSecret(hmac_secret.clone())))
     })
     .listen(listener)?
     .run();
@@ -105,6 +113,13 @@ pub fn run(
 }
 
 // helper - builds connection to pg pool
-pub fn get_connection_pool(configuration: &DatabaseSettings) -> PgPool {
-    PgPoolOptions::new().connect_lazy_with(configuration.with_db())
+pub async fn get_connection_pool(configuration: &DatabaseSettings) -> Result<PgPool, sqlx::Error> {
+    PgPoolOptions::new()
+        .connect_with(configuration.with_db())
+        .await
+    // PgPoolOptions::new().connect_lazy_with(configuration.with_db())
 }
+
+// wrapper type to avoid conflicts re: use of `Secret<String>` as type injected for HMAC value (registering another `Secret<String>` could override)
+#[derive(Clone)]
+pub struct HmacSecret(pub Secret<String>);

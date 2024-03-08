@@ -1,6 +1,6 @@
 use crate::authentication::{validate_credentials, AuthError, Credentials};
 use crate::routes::error_chain_fmt;
-// use actix_web::cookie::Cookie;
+use crate::session_state::TypedSession;
 use actix_web::http::header::LOCATION;
 use actix_web::{web, HttpResponse};
 use secrecy::Secret;
@@ -16,10 +16,11 @@ pub struct FormData {
     password: Secret<String>,
 }
 
-#[tracing::instrument(skip(form, db_pool), fields(username=tracing::field::Empty, user_id=tracing::field::Empty))]
+#[tracing::instrument(skip(form, db_pool, session), fields(username=tracing::field::Empty, user_id=tracing::field::Empty))]
 pub async fn login(
     form: web::Form<FormData>,
     db_pool: web::Data<PgPool>,
+    session: TypedSession,
 ) -> Result<HttpResponse, InternalError<LoginError>> {
     let credentials = Credentials {
         username: form.0.username,
@@ -27,12 +28,21 @@ pub async fn login(
     };
 
     tracing::Span::current().record("username", &tracing::field::display(&credentials.username));
+
     match validate_credentials(credentials, &db_pool).await {
         Ok(user_id) => {
             tracing::Span::current().record("user_id", &tracing::field::display(&user_id));
+            // to avoid session fixation attacks  (seed users browser with 'known' session token BFORE log in - wait for auth and then IN)
+            // rotates session token whenever user logs in:
+            session.renew();
+            session
+                // .insert("user_id", user_id)
+                .insert_user_id(user_id)
+                .map_err(|err| login_redirect(LoginError::UnexpectedError(err.into())))?;
+            // if something happens in serialization of `user_id` -> redirect to login w/ err message
             Ok(HttpResponse::SeeOther()
                 // for setting redirect logic
-                .insert_header((LOCATION, "/"))
+                .insert_header((LOCATION, "/admin/dashboard"))
                 .finish())
         }
         Err(err) => {
@@ -43,14 +53,22 @@ pub async fn login(
             FlashMessage::error(err.to_string()).send();
             let res = HttpResponse::SeeOther()
                 .insert_header((LOCATION, "/login"))
-                // COOKIES: example of setting cookies into header via actix-web
-                // .insert_header(("Set-Cookie", format!("_flash={err}")))
-                // .cookie(Cookie::new("_flash", err.to_string()))
                 // NOTE: we now use flash msgs from actix_web_flash_messages as middleware for creating / signing and setting cookie properties
                 .finish();
             Err(InternalError::from_response(err, res))
         }
     }
+}
+
+// -- HELPERS for LOGIN -- //
+
+// redirect to the login page with err msg
+fn login_redirect(err: LoginError) -> InternalError<LoginError> {
+    FlashMessage::error(err.to_string()).send();
+    let res = HttpResponse::SeeOther()
+        .insert_header((LOCATION, "/login"))
+        .finish();
+    InternalError::from_response(err, res)
 }
 
 // -- ERRORS for LOGIN -- //

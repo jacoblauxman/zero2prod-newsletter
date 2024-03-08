@@ -97,7 +97,7 @@ impl TestApp {
             .expect("Failed to execute POST req to `/login` in test")
     }
 
-    // for testing view of HTML page, no need to expose reqwest::Response -- just return the raw text from response body
+    // for testing view of HTML from login page res, no need to expose reqwest::Response -- just return the raw text from response body
     pub async fn get_login_html(&self) -> String {
         // reqwest::Client::new()
         self.api_client
@@ -108,6 +108,32 @@ impl TestApp {
             .text()
             .await
             .unwrap()
+    }
+
+    // for testing view of HTML from admin dashboard page res
+    // pub async fn get_admin_dashboard_html(&self) -> String {
+    //     self.api_client
+    //         .get(&format!("{}/admin/dashboard", &self.address))
+    //         .send()
+    //         .await
+    //         .expect("Failed to execute request")
+    //         .text()
+    //         .await
+    //         .unwrap()
+    // }
+
+    // for testing navigation to admin dashboard (+ redirect logic)
+    pub async fn get_admin_dashboard(&self) -> reqwest::Response {
+        self.api_client
+            .get(&format!("{}/admin/dashboard", &self.address))
+            .send()
+            .await
+            .expect("Failed to exectue request")
+    }
+
+    // for testing view of html from admin dashboard page res
+    pub async fn get_admin_dashboard_html(&self) -> String {
+        self.get_admin_dashboard().await.text().await.unwrap()
     }
 }
 
